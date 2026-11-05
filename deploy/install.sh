@@ -72,7 +72,7 @@ step "ขั้น 1/6  ตรวจระบบและหาไฟล์โ�
 
 if [ "$BUILD_ONLY" -eq 0 ] && { ! command -v systemctl >/dev/null 2>&1 || [ ! -d /run/systemd/system ]; }; then
   die "เครื่องนี้ไม่ได้ใช้ systemd (หรือยังไม่ได้บูตด้วย systemd) จึงติดตั้งเป็นบริการไม่ได้
-          ทางเลือก: ใช้ Docker แทน โดยรัน  docker compose up -d  (ดูรายละเอียดใน README.md)"
+          ทางเลือก: ใช้ Docker แทน โดยรัน  docker compose up -d  (ดูรายละเอียดใน docs/MANUAL.th.md หัวข้อ 4)"
 fi
 
 case "$(uname -m)" in
@@ -253,7 +253,7 @@ ZKSCAN_DATA=$DATA_DIR
 # วางไฟล์ใบรับรองและกุญแจ (PEM) ไว้ใน $CONF_DIR (เจ้าของ root:$SERVICE_USER, ไฟล์กุญแจสิทธิ์ 0640)
 # แล้วเอาเครื่องหมาย # หน้าสองบรรทัดนี้ออก ตั้งค่าทั้งสองตัวพร้อมกัน จากนั้น sudo systemctl restart zkscan
 # เมื่อเปิดแล้วเว็บจะเป็น https://... บนพอร์ตเดิม และคุกกี้ session จะมีแฟล็ก Secure
-# ดูวิธีทำใน README.md หัวข้อ "เปิดใช้ HTTPS (แนะนำ)"
+# ดูวิธีทำใน docs/MANUAL.th.md หัวข้อ 12.1
 #ZKSCAN_TLS_CERT=$CONF_DIR/server.crt
 #ZKSCAN_TLS_KEY=$CONF_DIR/server.key
 ENVEOF
@@ -384,5 +384,5 @@ echo "  รีสตาร์ท:             sudo systemctl restart zkscan"
 echo "  อัปเดตเป็นเวอร์ชันใหม่:  cd $REPO_ROOT && git pull && sudo ./install.sh"
 echo "  ถอนการติดตั้ง:         sudo $SCRIPT_DIR/uninstall.sh   (ข้อมูลยังอยู่ ถ้าไม่ใส่ --purge)"
 echo
-echo "ถ้าเปิดเว็บจากเครื่องอื่นไม่ได้ อาจเป็นเพราะไฟร์วอลล์ปิดพอร์ต $PORT — ดูวิธีเปิดใน README.md"
+echo "ถ้าเปิดเว็บจากเครื่องอื่นไม่ได้ อาจเป็นเพราะไฟร์วอลล์ปิดพอร์ต $PORT — ดูวิธีเปิดใน docs/MANUAL.th.md หัวข้อ 12.2"
 echo "หมายเหตุ: เครื่องนี้ต้องอยู่ในวงแลนเดียวกับเครื่องสแกน (หรือเข้าถึงพอร์ตเครื่องสแกน 4370 ได้)"
