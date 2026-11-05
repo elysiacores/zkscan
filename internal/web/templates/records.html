@@ -1,0 +1,39 @@
+{{define "content"}}{{with .Data}}
+<div class="page-head"><h1>บันทึกเวลา</h1></div>
+{{if .Warn}}<div class="flash flash-warn">{{.Warn}}</div>{{end}}
+<form method="get" action="/records" class="card filters">
+  <label class="field"><span>ตั้งแต่วันที่</span><input type="date" name="from" value="{{.From}}"></label>
+  <label class="field"><span>ถึงวันที่</span><input type="date" name="to" value="{{.To}}"></label>
+  <label class="field grow"><span>ค้นหา</span><input name="q" value="{{.Q}}" placeholder="รหัสหรือชื่อพนักงาน"></label>
+  <label class="field"><span>เครื่อง</span>
+    <select name="device"><option value="">ทั้งหมด</option>
+    {{$sel := .Device}}{{range .Devices}}<option value="{{.ID}}" {{if eq (printf "%d" .ID) $sel}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+  <div class="actions"><button class="btn btn-primary" type="submit">ค้นหา</button><a class="btn" href="/records">ล้างตัวกรอง</a></div>
+</form>
+<div class="quick"><span class="muted">ช่วงเวลา:</span>{{range .Quick}}<a class="btn btn-small" href="{{.URL}}">{{.Label}}</a>{{end}}</div>
+<div class="card flush">
+<div class="table-wrap">
+<table>
+  <thead><tr><th>เครื่อง</th><th>รหัสพนักงาน</th><th>ชื่อ</th><th>วันที่</th><th>เวลา</th><th>วิธียืนยัน</th><th>สถานะ</th></tr></thead>
+  <tbody>
+  {{range .Rows}}
+    <tr><td data-l="เครื่อง">{{.Device}}</td><td data-l="รหัสพนักงาน">{{.UserID}}</td><td data-l="ชื่อ">{{dash .Name}}</td>
+      <td data-l="วันที่">{{.Date}}</td><td data-l="เวลา">{{.Time}}</td><td data-l="วิธียืนยัน">{{.Verify}}</td>
+      <td data-l="สถานะ"><span class="punch punch-{{.PunchClass}}">{{.Punch}}</span></td></tr>
+  {{else}}
+    <tr><td colspan="7" class="center muted">ไม่พบบันทึกเวลาตามตัวกรองนี้</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+</div>
+<div class="bar">
+  <div class="muted">{{if .Rows}}แสดงรายการที่ {{num .FirstN}}–{{num .LastN}} จากทั้งหมด {{num .Total}} รายการ{{else}}ทั้งหมด 0 รายการ{{end}}</div>
+  <div class="pager">
+    {{if .PrevURL}}<a class="btn btn-small" href="{{.PrevURL}}">‹ ก่อนหน้า</a>{{end}}
+    <span class="muted">หน้า {{.Page}} / {{.Pages}}</span>
+    {{if .NextURL}}<a class="btn btn-small" href="{{.NextURL}}">ถัดไป ›</a>{{end}}
+  </div>
+  <a class="btn btn-primary" href="{{.CSVURL}}">บันทึกเป็น CSV</a>
+</div>
+{{end}}{{end}}

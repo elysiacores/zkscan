@@ -1,0 +1,19 @@
+{{define "content"}}{{with .Data}}
+<div class="page-head"><h1>บันทึกการทำงาน</h1></div>
+<div class="quick">{{$s := .Source}}{{range .Sources}}<a class="btn btn-small {{if eq .URL $s}}on{{end}}" href="/logs{{if .URL}}?source={{.URL}}{{end}}">{{.Label}}</a>{{end}}</div>
+<div class="card flush">
+<div class="table-wrap">
+<table>
+  <thead><tr><th>เวลา</th><th>ระดับ</th><th>หมวด</th><th>ข้อความ</th></tr></thead>
+  <tbody>
+  {{range .Rows}}
+    <tr><td data-l="เวลา">{{ts .At}}</td><td data-l="ระดับ"><span class="lvl lvl-{{.Class}}">{{.Level}}</span></td><td data-l="หมวด">{{.Source}}</td><td data-l="ข้อความ">{{.Message}}</td></tr>
+  {{else}}
+    <tr><td colspan="4" class="center muted">ยังไม่มีบันทึก</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+</div>
+<p class="muted small">แสดง 200 รายการล่าสุด</p>
+{{end}}{{end}}

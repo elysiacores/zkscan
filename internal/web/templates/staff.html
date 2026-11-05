@@ -1,0 +1,29 @@
+{{define "content"}}{{with .Data}}
+<div class="page-head"><h1>พนักงานในเครื่อง</h1></div>
+<form method="get" action="/staff" class="card filters">
+  <label class="field grow"><span>ค้นหา</span><input name="q" value="{{.Q}}" placeholder="รหัสหรือชื่อพนักงาน"></label>
+  <label class="field"><span>เครื่อง</span>
+    <select name="device"><option value="">ทั้งหมด</option>
+    {{$sel := .Device}}{{range .Devices}}<option value="{{.ID}}" {{if eq (printf "%d" .ID) $sel}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+  <div class="actions"><button class="btn btn-primary" type="submit">ค้นหา</button><a class="btn" href="/staff">ล้างตัวกรอง</a></div>
+</form>
+<div class="card flush">
+<div class="table-wrap">
+<table>
+  <thead><tr><th>เครื่อง</th><th>UID</th><th>รหัสพนักงาน</th><th>ชื่อ</th><th>สิทธิ์</th><th>เลขบัตร</th></tr></thead>
+  <tbody>
+  {{range .Rows}}
+    <tr><td data-l="เครื่อง">{{.Device}}</td><td data-l="UID">{{.UID}}</td><td data-l="รหัสพนักงาน">{{.UserID}}</td>
+      <td data-l="ชื่อ">{{dash .Name}}</td><td data-l="สิทธิ์">{{.Role}}</td><td data-l="เลขบัตร">{{.Card}}</td></tr>
+  {{else}}
+    <tr><td colspan="6" class="center muted">ไม่พบพนักงาน (ลองกด “ดึงข้อมูลทุกเครื่อง” ที่หน้าภาพรวมก่อน)</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+</div>
+<div class="bar">
+  <div class="muted">ทั้งหมด {{num .Total}} คน{{if .Capped}} · แสดงเฉพาะ 1,000 คนแรก ใช้ค้นหาหรือบันทึกเป็น CSV เพื่อดูทั้งหมด{{end}}</div>
+  <a class="btn btn-primary" href="{{.CSVURL}}">บันทึกเป็น CSV</a>
+</div>
+{{end}}{{end}}

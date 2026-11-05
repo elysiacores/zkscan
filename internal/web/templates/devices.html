@@ -1,0 +1,31 @@
+{{define "content"}}{{with .Data}}
+<div class="page-head">
+  <h1>เครื่องสแกน</h1>
+  <a class="btn btn-primary" href="/devices/new">+ เพิ่มเครื่อง</a>
+</div>
+{{if .Cards}}
+<div class="card flush">
+<div class="table-wrap">
+<table>
+  <thead><tr><th>ชื่อเครื่อง</th><th>ที่อยู่</th><th>สถานะ</th><th>ดึงล่าสุด</th><th></th></tr></thead>
+  <tbody>
+  {{range .Cards}}
+    <tr>
+      <td data-l="ชื่อเครื่อง"><strong>{{.Device.Name}}</strong></td>
+      <td data-l="ที่อยู่">{{.Addr}}</td>
+      <td data-l="สถานะ"><span class="chip chip-{{.Kind}}">{{.Text}}</span></td>
+      <td data-l="ดึงล่าสุด">{{tsp .Status.LastPullAt}}</td>
+      <td class="actions-cell">
+        <a class="btn btn-small" href="/devices/{{.Device.ID}}/edit">แก้ไข</a>
+        <form method="post" action="/devices/{{.Device.ID}}/pull" class="inline"><button class="btn btn-small" type="submit" data-busy="กำลังดึง…">ดึงข้อมูล</button></form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+</div>
+{{else}}
+<div class="card center"><p>ยังไม่มีเครื่องสแกน</p></div>
+{{end}}
+{{end}}{{end}}

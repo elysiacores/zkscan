@@ -1,0 +1,12 @@
+{{define "content"}}{{with .Data}}
+<div class="page-head"><h1>ตั้งค่า</h1></div>
+<section class="card narrow-l">
+  {{if .Err}}<div class="flash flash-err" role="alert">{{.Err}}</div>{{end}}
+  <form method="post" action="/settings" class="form">
+    <label class="field {{if .Err}}bad{{end}}"><span>ดึงข้อมูลอัตโนมัติทุก (นาที)</span>
+      <input name="pull_interval" value="{{.Interval}}" inputmode="numeric" required></label>
+    <p class="hint">ใส่ 0 เพื่อปิดการดึงอัตโนมัติ (ยังกด “ดึงข้อมูลทุกเครื่อง” เองได้) · ค่าที่ใช้ได้ 0 ถึง 1440 นาที · มีผลในรอบถัดไปโดยไม่ต้องรีสตาร์ท</p>
+    <div class="actions"><button class="btn btn-primary" type="submit">บันทึก</button></div>
+  </form>
+</section>
+{{end}}{{end}}

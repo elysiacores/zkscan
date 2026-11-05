@@ -1,0 +1,50 @@
+{{define "content"}}{{with .Data}}
+<div class="page-head"><h1>{{if .IsEdit}}แก้ไขเครื่องสแกน{{else}}เพิ่มเครื่องสแกน{{end}}</h1>
+  <a class="btn" href="/devices">กลับรายการเครื่อง</a></div>
+{{if .Errs}}<div class="flash flash-err" role="alert">กรอกข้อมูลไม่ถูกต้อง กรุณาแก้ตามข้อความสีแดงด้านล่าง</div>{{end}}
+<div class="two">
+<section class="card">
+  <form method="post" action="{{if .IsEdit}}/devices/{{.ID}}{{else}}/devices{{end}}" class="form" novalidate>
+    <label class="field {{if .Errs.name}}bad{{end}}"><span>ชื่อเครื่อง</span>
+      <input name="name" value="{{.Form.Name}}" maxlength="100" required>
+      {{with .Errs.name}}<em class="err">{{.}}</em>{{end}}</label>
+    <label class="field {{if .Errs.ip}}bad{{end}}"><span>IP หรือชื่อโฮสต์</span>
+      <input name="ip" value="{{.Form.IP}}" placeholder="192.168.1.201" autocapitalize="none" required>
+      {{with .Errs.ip}}<em class="err">{{.}}</em>{{end}}</label>
+    <div class="row">
+      <label class="field {{if .Errs.port}}bad{{end}}"><span>พอร์ต</span>
+        <input name="port" value="{{.Form.Port}}" inputmode="numeric" required>
+        {{with .Errs.port}}<em class="err">{{.}}</em>{{end}}</label>
+      <label class="field {{if .Errs.comm_key}}bad{{end}}"><span>รหัสเชื่อมต่อ (Comm Key)</span>
+        <input name="comm_key" value="{{.Form.CommKey}}" inputmode="numeric" required>
+        {{with .Errs.comm_key}}<em class="err">{{.}}</em>{{end}}</label>
+    </div>
+    <p class="hint">Comm Key คือรหัสเชื่อมต่อที่ตั้งในเมนูเครื่อง (การสื่อสาร › ความปลอดภัย) ถ้าไม่เคยตั้งให้ใส่ 0 · พอร์ตปกติ 4370</p>
+    <div class="row">
+      <fieldset class="field {{if .Errs.transport}}bad{{end}}"><legend>การเชื่อมต่อ</legend>
+        <label class="check"><input type="radio" name="transport" value="tcp" {{if ne .Form.Transport "udp"}}checked{{end}}> TCP</label>
+        <label class="check"><input type="radio" name="transport" value="udp" {{if eq .Form.Transport "udp"}}checked{{end}}> UDP</label>
+        {{with .Errs.transport}}<em class="err">{{.}}</em>{{end}}</fieldset>
+      <label class="field {{if .Errs.timeout}}bad{{end}}"><span>หมดเวลา (วินาที)</span>
+        <input name="timeout" value="{{.Form.Timeout}}" inputmode="numeric" required>
+        {{with .Errs.timeout}}<em class="err">{{.}}</em>{{end}}</label>
+    </div>
+    <label class="check"><input type="checkbox" name="demo" value="1" {{if .Form.Demo}}checked{{end}}> โหมดสาธิต (ไม่ต่อเครื่องจริง)</label>
+    <label class="check"><input type="checkbox" name="enabled" value="1" {{if .Form.Enabled}}checked{{end}}> เปิดใช้งาน (ดึงข้อมูลตามรอบอัตโนมัติ)</label>
+    <div class="actions"><button class="btn btn-primary" type="submit">บันทึก</button><a class="btn" href="/devices">ยกเลิก</a></div>
+  </form>
+</section>
+{{if .IsEdit}}
+<section class="card">
+  <h2>ทำงานกับเครื่องนี้</h2>
+  <p class="muted small">ปุ่มเหล่านี้ใช้ค่าที่บันทึกไว้แล้ว ถ้าเพิ่งแก้ไขให้กด “บันทึก” ก่อน</p>
+  <div class="stack">
+    <form method="post" action="/devices/{{.ID}}/pull"><button class="btn btn-primary btn-block" type="submit" data-busy="กำลังดึงข้อมูล…">ดึงข้อมูลเครื่องนี้</button></form>
+    <form method="post" action="/devices/{{.ID}}/test"><button class="btn btn-block" type="submit" data-busy="กำลังทดสอบ…">ทดสอบการเชื่อมต่อ</button></form>
+    <form method="post" action="/devices/{{.ID}}/settime" data-confirm="ตั้งเวลาเครื่องสแกนให้ตรงกับเวลาของเซิร์ฟเวอร์ตอนนี้ ใช่หรือไม่?"><button class="btn btn-block" type="submit" data-busy="กำลังตั้งเวลา…">ตั้งเวลาเครื่อง (ตามเวลาเซิร์ฟเวอร์)</button></form>
+    <form method="post" action="/devices/{{.ID}}/delete" data-confirm="ลบเครื่องนี้ใช่หรือไม่? บันทึกเวลาที่ดึงมาแล้วจะยังอยู่"><button class="btn btn-danger btn-block" type="submit">ลบเครื่องนี้</button></form>
+  </div>
+</section>
+{{end}}
+</div>
+{{end}}{{end}}

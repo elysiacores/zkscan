@@ -1,0 +1,21 @@
+services:
+  zkscan:
+    build:
+      context: .
+      args:
+        VERSION: ${ZKSCAN_VERSION:-dev}
+    image: zkscan:latest
+    container_name: zkscan
+    restart: unless-stopped
+    ports:
+      - "6565:6565"
+    environment:
+      # เขตเวลาของคอนเทนเนอร์ เปลี่ยนได้ด้วย ZKSCAN_TZ=Asia/Tokyo docker compose up -d
+      TZ: ${ZKSCAN_TZ:-Asia/Bangkok}
+      ZKSCAN_DATA: /data
+      ZKSCAN_LISTEN: ":6565"
+    volumes:
+      - zkscan-data:/data
+
+volumes:
+  zkscan-data:
