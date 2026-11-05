@@ -348,8 +348,9 @@ func cmdServe(o options, stdout, stderr io.Writer) int {
 	go func() { defer wg.Done(); sessionJanitor(bg, st) }()
 	go func() { defer wg.Done(); passwordFileJanitor(bg, st, o.Data, time.Minute) }()
 
-	fmt.Fprintf(stdout, "zkscan %s เริ่มทำงาน — รับการเชื่อมต่อที่ %s://%s, โฟลเดอร์ข้อมูล %s\n", version, scheme, o.Listen, o.Data)
-	logSystem(st, "info", fmt.Sprintf("zkscan %s เริ่มทำงาน (รับการเชื่อมต่อที่ %s://%s)", version, scheme, o.Listen))
+	shown := displayURL(scheme, o.Listen)
+	fmt.Fprintf(stdout, "zkscan %s เริ่มทำงาน — เปิดเว็บที่ %s, โฟลเดอร์ข้อมูล %s\n", version, shown, o.Data)
+	logSystem(st, "info", fmt.Sprintf("zkscan %s เริ่มทำงาน — เปิดเว็บที่ %s", version, shown))
 
 	errc := make(chan error, 1)
 	go func() {
@@ -421,4 +422,17 @@ func passwordFileJanitor(ctx context.Context, st core.Store, dataDir string, eve
 			removePasswordFileIfChanged(ctx, st, dataDir)
 		}
 	}
+}
+
+// displayURL แปลงที่อยู่ --listen เป็นข้อความที่คนอ่านรู้เรื่อง
+// host ว่าง/0.0.0.0/:: แปลว่ารับทุกการ์ดเครือข่าย จึงแสดง <IP ของเครื่องนี้> แทน
+func displayURL(scheme, addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return scheme + "://" + addr
+	}
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		return scheme + "://<IP ของเครื่องนี้>:" + port + " (รับทุกการ์ดเครือข่าย)"
+	}
+	return scheme + "://" + net.JoinHostPort(host, port)
 }
