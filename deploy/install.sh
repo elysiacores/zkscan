@@ -1,7 +1,35 @@
 #!/usr/bin/env bash
 # ติดตั้ง zkscan เป็นบริการ (systemd) บน Linux — รันซ้ำได้อย่างปลอดภัย (ใช้อัปเดตก็ได้)
 # วิธีใช้:  sudo ./install.sh        (หรือ sudo ./deploy/install.sh)
+#
+# ไฟล์โปรแกรมหาตามลำดับนี้:
+#   1) dist/zkscan-linux-<arch> ถ้ามี (สร้างด้วย make dist)
+#   2) คอมไพล์ด้วย Go 1.24+ ที่ติดตั้งในเครื่องอยู่แล้ว
+#   3) ดาวน์โหลด Go ทางการ (ตรวจ SHA-256) ไปไว้ในโฟลเดอร์ชั่วคราวแล้วคอมไพล์ — ไม่ติดตั้งอะไรลงระบบ
+# ตัวเลือก:
+#   --no-download   ไม่ดาวน์โหลด Go เอง (สำหรับเครื่องที่ออฟไลน์/ถูกจำกัดเครือข่าย)
+#                   ถ้าไม่มี dist/ และไม่มี Go 1.24+ จะหยุดพร้อมวิธีแก้
+#   --build-only    (สำหรับทดสอบ) เตรียมไฟล์โปรแกรมในขั้น 1 แล้วพิมพ์เวอร์ชัน จากนั้นออกทันที
+#                   ไม่ติดตั้งอะไร และไม่ต้องใช้ systemd
 set -euo pipefail
+
+# ---- Go ที่ใช้ดาวน์โหลดมาคอมไพล์ (ปักเวอร์ชันและ SHA-256 ไว้ตายตัว) ----
+# วิธีอัปเดต: เปิด https://go.dev/dl/?mode=json&include=all เลือก go1.24.x ล่าสุด
+# แล้วนำชื่อเวอร์ชัน และ sha256 ของไฟล์ go<ver>.linux-amd64.tar.gz / linux-arm64.tar.gz มาแทนค่าด้านล่าง
+GO_FETCH_VERSION="go1.24.13"
+GO_SHA256_AMD64="1fc94b57134d51669c72173ad5d49fd62afb0f1db9bf3f798fd98ee423f8d730"
+GO_SHA256_ARM64="74d97be1cc3a474129590c67ebf748a96e72d9f3a2b6fef3ed3275de591d49b3"
+
+NO_DOWNLOAD=0
+BUILD_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-download) NO_DOWNLOAD=1 ;;
+    --build-only)  BUILD_ONLY=1 ;;
+    -h|--help)     sed -n '2,15p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) echo "[ผิดพลาด] ไม่รู้จักตัวเลือก '$arg' (ที่มี: --no-download)" >&2; exit 2 ;;
+  esac
+done
 
 SERVICE_USER="zkscan"
 DATA_DIR="/var/lib/zkscan"
@@ -42,7 +70,7 @@ fi
 # ---------- 1. ตรวจ systemd และหาไฟล์โปรแกรม ----------
 step "ขั้น 1/6  ตรวจระบบและหาไฟล์โปรแกรม"
 
-if ! command -v systemctl >/dev/null 2>&1 || [ ! -d /run/systemd/system ]; then
+if [ "$BUILD_ONLY" -eq 0 ] && { ! command -v systemctl >/dev/null 2>&1 || [ ! -d /run/systemd/system ]; }; then
   die "เครื่องนี้ไม่ได้ใช้ systemd (หรือยังไม่ได้บูตด้วย systemd) จึงติดตั้งเป็นบริการไม่ได้
           ทางเลือก: ใช้ Docker แทน โดยรัน  docker compose up -d  (ดูรายละเอียดใน README.md)"
 fi
@@ -71,6 +99,77 @@ TMP_DIR="$(mktemp -d)"
 NEW_BIN="$TMP_DIR/zkscan"
 DIST_BIN="$REPO_ROOT/dist/zkscan-linux-$ARCH"
 
+# build_with GO_COMMAND — คอมไพล์ zkscan ด้วยคำสั่ง go ที่ระบุ ผลลัพธ์อยู่ที่ $NEW_BIN
+build_with() {
+  local gobin="$1" version
+  version="$(cd "$REPO_ROOT" && git -c safe.directory="$REPO_ROOT" describe --tags --always --dirty 2>/dev/null || true)"
+  [ -n "$version" ] || version="dev"
+  ( cd "$REPO_ROOT" && CGO_ENABLED=0 "$gobin" build -buildvcs=false -trimpath -tags timetzdata \
+      -ldflags "-s -w -X main.version=$version" -o "$NEW_BIN" ./cmd/zkscan )
+  info "คอมไพล์เสร็จ (เวอร์ชัน $version)"
+}
+
+# ข้อความช่วยเหลือเมื่อไม่มีทางได้ไฟล์โปรแกรม (ใช้ซ้ำหลายจุด)
+no_binary_help() {
+  echo "          เลือกวิธีใดวิธีหนึ่ง:"
+  echo "            1) ตรวจว่าเครื่องต่ออินเทอร์เน็ตได้ (หรือตั้งค่า proxy: export https_proxy=http://...) แล้วรัน  sudo -E ./install.sh  ใหม่"
+  echo "            2) ใช้ Docker แทนโดยไม่ต้องมี Go:  docker compose up -d"
+  echo "            3) สร้างไฟล์โปรแกรมจากเครื่องอื่นที่มี Go ด้วย  make dist  แล้วคัดลอกโฟลเดอร์ dist/ มาไว้ที่ $REPO_ROOT"
+}
+
+# fetch_go — ดาวน์โหลด Go ทางการ ตรวจ SHA-256 แล้วแตกไฟล์ใน $TMP_DIR (ไม่ติดตั้งลงระบบ)
+# ตั้งค่า GO_FETCHED_BIN เป็นพาธของคำสั่ง go ที่ได้
+fetch_go() {
+  local want file url tarball
+  case "$ARCH" in
+    amd64) want="$GO_SHA256_AMD64" ;;
+    arm64) want="$GO_SHA256_ARM64" ;;
+  esac
+  file="$GO_FETCH_VERSION.linux-$ARCH.tar.gz"
+  url="https://go.dev/dl/$file"
+  tarball="$TMP_DIR/$file"
+
+  command -v tar >/dev/null 2>&1 || die "ไม่พบคำสั่ง tar จึงแตกไฟล์ Go ที่ดาวน์โหลดไม่ได้
+$(no_binary_help)"
+  command -v sha256sum >/dev/null 2>&1 || die "ไม่พบคำสั่ง sha256sum จึงตรวจความถูกต้องของไฟล์ที่ดาวน์โหลดไม่ได้
+$(no_binary_help)"
+
+  info "กำลังดาวน์โหลด Go ${GO_FETCH_VERSION#go} สำหรับคอมไพล์ (ประมาณ 70 MB) ... อาจใช้เวลาสักครู่ อย่าเพิ่งกดปิด"
+  info "(ใช้ชั่วคราวเท่านั้น ติดตั้งเสร็จจะลบทิ้ง ไม่เหลืออะไรในเครื่อง)"
+  local ok=0
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL --connect-timeout 20 --max-time 900 --retry 3 --retry-delay 3 -sS -o "$tarball" "$url" && ok=1
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -T 30 -t 3 -O "$tarball" "$url" && ok=1
+  else
+    die "ไม่พบทั้ง curl และ wget จึงดาวน์โหลด Go ไม่ได้
+$(no_binary_help)"
+  fi
+  if [ "$ok" -ne 1 ] || [ ! -s "$tarball" ]; then
+    die "ดาวน์โหลด Go ไม่สำเร็จจาก $url
+          สาเหตุที่พบบ่อย: เครื่องไม่ได้ต่ออินเทอร์เน็ต หรือต้องผ่าน proxy
+$(no_binary_help)"
+  fi
+
+  local got
+  got="$(sha256sum "$tarball" | cut -d' ' -f1)"
+  if [ "$got" != "$want" ]; then
+    die "ไฟล์ Go ที่ดาวน์โหลดมาไม่ตรงกับค่า SHA-256 ที่คาดไว้ (อาจดาวน์โหลดไม่ครบ หรือไฟล์ถูกแก้ไข) — หยุดเพื่อความปลอดภัย
+          ที่คาดไว้: $want
+          ที่ได้:    $got
+$(no_binary_help)"
+  fi
+  info "ตรวจไฟล์ถูกต้อง (SHA-256 ตรงกัน)"
+
+  mkdir -p "$TMP_DIR/gosdk"
+  tar -xzf "$tarball" -C "$TMP_DIR/gosdk" || die "แตกไฟล์ Go ไม่สำเร็จ (ดิสก์เต็มหรือไฟล์เสีย?)
+$(no_binary_help)"
+  rm -f "$tarball"
+  GO_FETCHED_BIN="$TMP_DIR/gosdk/go/bin/go"
+  [ -x "$GO_FETCHED_BIN" ] || die "แตกไฟล์ Go แล้วแต่ไม่พบคำสั่ง go
+$(no_binary_help)"
+}
+
 if [ -f "$DIST_BIN" ]; then
   info "ใช้ไฟล์โปรแกรมสำเร็จรูป: $DIST_BIN"
   cp "$DIST_BIN" "$NEW_BIN"
@@ -82,17 +181,24 @@ else
   export PATH
   if go_ok; then
     info "ไม่พบ dist/zkscan-linux-$ARCH — กำลังคอมไพล์จากซอร์สด้วย Go $(go env GOVERSION) (ต้องต่ออินเทอร์เน็ตเพื่อโหลดไลบรารี อาจใช้เวลาสักครู่)"
-    VERSION="$(cd "$REPO_ROOT" && git describe --tags --always --dirty 2>/dev/null || true)"
-    [ -n "$VERSION" ] || VERSION="dev"
-    ( cd "$REPO_ROOT" && CGO_ENABLED=0 go build -buildvcs=false -trimpath -tags timetzdata \
-        -ldflags "-s -w -X main.version=$VERSION" -o "$NEW_BIN" ./cmd/zkscan )
-    info "คอมไพล์เสร็จ (เวอร์ชัน $VERSION)"
-  else
-    die "ไม่พบไฟล์โปรแกรมสำเร็จรูป ($DIST_BIN) และเครื่องนี้ไม่มี Go เวอร์ชัน 1.24 ขึ้นไป
+    build_with go
+  elif [ "$NO_DOWNLOAD" -eq 1 ]; then
+    die "ไม่พบไฟล์โปรแกรมสำเร็จรูป ($DIST_BIN) และเครื่องนี้ไม่มี Go เวอร์ชัน 1.24 ขึ้นไป (และสั่งไม่ให้ดาวน์โหลดด้วย --no-download)
           เลือกวิธีใดวิธีหนึ่ง:
             1) ติดตั้ง Go 1.24+ จาก https://go.dev/dl/ แล้วรัน  sudo ./install.sh  ใหม่
             2) สร้างไฟล์โปรแกรมจากเครื่องอื่นที่มี Go ด้วย  make dist  แล้วคัดลอกโฟลเดอร์ dist/ มาไว้ที่ $REPO_ROOT
-            3) ใช้ Docker แทนโดยไม่ต้องมี Go:  docker compose up -d"
+            3) ใช้ Docker แทนโดยไม่ต้องมี Go:  docker compose up -d
+            4) รันใหม่โดยไม่ใส่ --no-download เพื่อให้สคริปต์โหลด Go มาคอมไพล์เอง (ต้องต่ออินเทอร์เน็ต)"
+  else
+    info "ไม่พบ dist/zkscan-linux-$ARCH และไม่มี Go 1.24+ ในเครื่อง — จะดาวน์โหลด Go ทางการมาคอมไพล์ให้อัตโนมัติ"
+    fetch_go
+    info "กำลังคอมไพล์ zkscan (ต้องโหลดไลบรารีด้วย อาจใช้เวลา 1-5 นาที อย่าเพิ่งกดปิด) ..."
+    mkdir -p "$TMP_DIR/gopath" "$TMP_DIR/gocache" "$TMP_DIR/gomodcache"
+    GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
+      GOROOT="$TMP_DIR/gosdk/go" GOPATH="$TMP_DIR/gopath" \
+      GOCACHE="$TMP_DIR/gocache" GOMODCACHE="$TMP_DIR/gomodcache" \
+      build_with "$GO_FETCHED_BIN" || die "คอมไพล์ไม่สำเร็จ — ดูข้อความด้านบน (ถ้าโหลดไลบรารีไม่ได้ ให้ตรวจอินเทอร์เน็ต/proxy)
+$(no_binary_help)"
   fi
 fi
 
@@ -103,6 +209,11 @@ if ! NEW_VERSION="$("$NEW_BIN" version 2>&1)"; then
           ลองลบโฟลเดอร์ dist/ แล้วรันใหม่ หรือสร้างใหม่ด้วย  make dist"
 fi
 info "เวอร์ชันที่จะติดตั้ง: $NEW_VERSION"
+
+if [ "$BUILD_ONLY" -eq 1 ]; then
+  echo "BUILD_ONLY_OK: $NEW_VERSION"
+  exit 0
+fi
 
 # ---------- 2. ผู้ใช้ระบบ โฟลเดอร์ และไฟล์ตั้งค่า ----------
 step "ขั้น 2/6  เตรียมผู้ใช้ระบบ โฟลเดอร์ข้อมูล และไฟล์ตั้งค่า"
