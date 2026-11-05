@@ -139,7 +139,7 @@ fieldset.field .check { display: inline-flex; margin-top: 6px; }
 .chip-off { background: var(--grey-bg); color: var(--muted); }
 .punch-in { color: var(--green); }
 .punch-out { color: var(--blue); }
-.lvl { font-size: .88rem; padding: 1px 8px; border-radius: 6px; }
+.lvl { white-space: nowrap; display: inline-block; font-size: .88rem; padding: 1px 8px; border-radius: 6px; }
 .lvl-info { background: var(--grey-bg); color: var(--muted); }
 .lvl-warn { background: var(--amber-bg); color: var(--amber); }
 .lvl-err { background: var(--red-bg); color: var(--red); }
@@ -152,6 +152,10 @@ th { color: var(--muted); font-weight: 400; border-bottom: 1px solid var(--borde
 tbody tr:nth-child(even) { background: #f9fafb; }
 tbody tr + tr td { border-top: 1px solid #eef1f4; }
 td { word-break: break-word; }
+td.nw { white-space: nowrap; word-break: normal; }
+td.msg { width: 100%; min-width: 220px; }
+.table-wrap table { min-width: 560px; }
+input::placeholder, textarea::placeholder { color: #a3adb8; opacity: 1; }
 .actions-cell { white-space: nowrap; text-align: right; }
 .actions-cell > * { margin-left: 4px; }
 .bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -167,6 +171,11 @@ dl.kv dd { margin: 0; }
 .ex { padding: 12px 14px; margin-bottom: 10px; }
 .ex-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
 pre { margin: 0; background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+
+/* ฟอร์มข้างตาราง: ต่ำกว่า 1200px ให้ซ้อนเป็นคอลัมน์เดียว ตารางเต็มความกว้าง */
+@media (max-width: 1200px) {
+  .two.two-wide { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ----- phone ----- */
 @media (max-width: 800px) {
@@ -188,6 +197,8 @@ pre { margin: 0; background: #0f172a; color: #e2e8f0; border-radius: 8px; paddin
   tbody tr { padding: 8px 4px; border-top: 1px solid var(--border); }
   tbody tr:first-child { border-top: 0; }
   tbody tr + tr td { border-top: 0; }
+  .table-wrap table { min-width: 0; }
+  td.nw { white-space: normal; }
   td { padding: 3px 14px; display: flex; gap: 12px; justify-content: space-between; text-align: right; }
   td::before { content: attr(data-l); color: var(--muted); text-align: left; flex: 0 0 auto; }
   td[colspan] { display: block; text-align: center; }

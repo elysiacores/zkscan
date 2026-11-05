@@ -4,7 +4,9 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
@@ -42,6 +44,7 @@ type Web struct {
 	d      Deps
 	tpl    map[string]*template.Template
 	static fs.FS
+	hashes map[string]string // static file -> first 10 hex of sha256 (cache-busting)
 }
 
 type navItem struct{ Key, Href, Label string }
@@ -81,19 +84,38 @@ func New(d Deps) (*Web, error) {
 	if d.Store == nil || d.Auth == nil || d.Puller == nil || d.Client == nil {
 		return nil, errors.New("web: ต้องระบุ Store, Auth, Puller และ Client ครบ")
 	}
-	w := &Web{d: d, tpl: map[string]*template.Template{}}
-	for _, n := range pageNames {
-		t, err := template.New("layout").Funcs(funcMap).ParseFS(assets, "templates/layout.html", "templates/"+n+".html")
-		if err != nil {
-			return nil, fmt.Errorf("web: template %s: %w", n, err)
-		}
-		w.tpl[n] = t
-	}
+	w := &Web{d: d, tpl: map[string]*template.Template{}, hashes: map[string]string{}}
 	sub, err := fs.Sub(assets, "static")
 	if err != nil {
 		return nil, err
 	}
 	w.static = sub
+	for _, f := range []string{"style.css", "app.js"} {
+		b, err := fs.ReadFile(sub, f)
+		if err != nil {
+			return nil, fmt.Errorf("web: static %s: %w", f, err)
+		}
+		sum := sha256.Sum256(b)
+		w.hashes[f] = hex.EncodeToString(sum[:])[:10]
+	}
+	fm := template.FuncMap{}
+	for k, v := range funcMap {
+		fm[k] = v
+	}
+	// asset คืน URL ของไฟล์ static พร้อม ?v=<hash> เพื่อให้เบราว์เซอร์โหลดใหม่เมื่อไฟล์เปลี่ยน
+	fm["asset"] = func(name string) string {
+		if h, ok := w.hashes[name]; ok {
+			return "/static/" + name + "?v=" + h
+		}
+		return "/static/" + name
+	}
+	for _, n := range pageNames {
+		t, err := template.New("layout").Funcs(fm).ParseFS(assets, "templates/layout.html", "templates/"+n+".html")
+		if err != nil {
+			return nil, fmt.Errorf("web: template %s: %w", n, err)
+		}
+		w.tpl[n] = t
+	}
 	return w, nil
 }
 
@@ -165,7 +187,11 @@ func (w *Web) serveStatic(c *fiber.Ctx) error {
 		c.Set(fiber.HeaderContentType, "application/octet-stream")
 	}
 	c.Set("X-Content-Type-Options", "nosniff")
-	c.Set(fiber.HeaderCacheControl, "public, max-age=3600")
+	cc := "public, max-age=3600"
+	if v := c.Query("v"); v != "" && v == w.hashes[name] {
+		cc = "public, max-age=31536000, immutable" // URL มี hash ตรงกับไฟล์ จึงแคชได้ตลอด
+	}
+	c.Set(fiber.HeaderCacheControl, cc)
 	return c.Send(b)
 }
 

@@ -9,15 +9,15 @@
       <input name="name" value="{{.Form.Name}}" maxlength="100" required>
       {{with .Errs.name}}<em class="err">{{.}}</em>{{end}}</label>
     <label class="field {{if .Errs.ip}}bad{{end}}"><span>IP หรือชื่อโฮสต์</span>
-      <input name="ip" value="{{.Form.IP}}" placeholder="192.168.1.201" autocapitalize="none" required>
+      <input name="ip" value="{{.Form.IP}}" placeholder="เช่น 192.168.1.201" autocapitalize="none" required>
       {{with .Errs.ip}}<em class="err">{{.}}</em>{{end}}</label>
     <div class="row">
       <label class="field {{if .Errs.port}}bad{{end}}"><span>พอร์ต</span>
         <input name="port" value="{{.Form.Port}}" inputmode="numeric" required>
         {{with .Errs.port}}<em class="err">{{.}}</em>{{end}}</label>
       <label class="field {{if .Errs.comm_key}}bad{{end}}"><span>รหัสเชื่อมต่อ (Comm Key)</span>
-        <input type="password" name="comm_key" value="{{if not .IsEdit}}{{.Form.CommKey}}{{end}}" autocomplete="new-password" inputmode="numeric" {{if not .IsEdit}}required{{end}}>
-        {{if .IsEdit}}<small class="muted">เว้นว่างไว้ = ใช้รหัสเดิม</small>{{end}}
+        {{if .IsEdit}}<input type="password" name="comm_key" value="" autocomplete="new-password" inputmode="numeric">
+        <small class="muted">เว้นว่างไว้ = ใช้รหัสเดิม</small>{{else}}<input type="text" name="comm_key" value="{{.Form.CommKey}}" autocomplete="off" inputmode="numeric" placeholder="0 (ถ้าไม่เคยตั้ง)">{{end}}
         {{with .Errs.comm_key}}<em class="err">{{.}}</em>{{end}}</label>
     </div>
     <p class="hint">Comm Key คือรหัสเชื่อมต่อที่ตั้งในเมนูเครื่อง (การสื่อสาร › ความปลอดภัย) ถ้าไม่เคยตั้งให้ใส่ 0 · พอร์ตปกติ 4370</p>

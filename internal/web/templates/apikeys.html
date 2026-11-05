@@ -8,15 +8,15 @@
   <div class="copybox"><code id="new-key">{{.NewKey}}</code><button class="btn btn-small btn-primary" type="button" data-copy="new-key">คัดลอก</button></div>
 </section>
 {{end}}
-<div class="two">
+<div class="two two-wide">
 <section class="card flush">
 <div class="table-wrap">
 <table>
   <thead><tr><th>ชื่อ</th><th>ขึ้นต้นด้วย</th><th>IP ที่อนุญาต</th><th>สร้างเมื่อ</th><th>ใช้ล่าสุด</th><th>สถานะ</th><th></th></tr></thead>
   <tbody>
   {{range .Keys}}
-    <tr><td data-l="ชื่อ"><strong>{{.Name}}</strong></td><td data-l="ขึ้นต้นด้วย"><code>{{.Prefix}}…</code></td><td data-l="IP ที่อนุญาต">{{.IPs}}</td>
-      <td data-l="สร้างเมื่อ">{{ts .Created}}</td><td data-l="ใช้ล่าสุด">{{tsp .LastUsed}}</td>
+    <tr><td data-l="ชื่อ" class="nw"><strong>{{.Name}}</strong></td><td data-l="ขึ้นต้นด้วย" class="nw"><code>{{.Prefix}}…</code></td><td data-l="IP ที่อนุญาต">{{.IPs}}</td>
+      <td data-l="สร้างเมื่อ" class="nw">{{ts .Created}}</td><td data-l="ใช้ล่าสุด" class="nw">{{tsp .LastUsed}}</td>
       <td data-l="สถานะ">{{if .Revoked}}<span class="chip chip-off">ยกเลิกแล้ว</span>{{else}}<span class="chip chip-ok">ใช้งานได้</span>{{end}}</td>
       <td class="actions-cell">{{if not .Revoked}}<form method="post" action="/api-keys/{{.ID}}/revoke" class="inline" data-confirm="ยกเลิกกุญแจนี้ใช่หรือไม่? ระบบที่ใช้กุญแจนี้จะเรียก API ไม่ได้อีก และกู้คืนไม่ได้"><button class="btn btn-small btn-danger" type="submit">ยกเลิก</button></form>{{end}}</td></tr>
   {{else}}

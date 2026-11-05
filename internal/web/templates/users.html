@@ -7,15 +7,15 @@
   <div class="copybox"><code id="temp-pw">{{.Temp}}</code><button class="btn btn-small" type="button" data-copy="temp-pw">คัดลอก</button></div>
 </section>
 {{end}}
-<div class="two">
+<div class="two two-wide">
 <section class="card flush">
 <div class="table-wrap">
 <table>
   <thead><tr><th>ชื่อผู้ใช้</th><th>สร้างเมื่อ</th><th>เข้าล่าสุด</th><th></th></tr></thead>
   <tbody>
   {{range .Rows}}
-    <tr><td data-l="ชื่อผู้ใช้"><strong>{{.Username}}</strong>{{if .Self}} <span class="chip chip-ok">คุณ</span>{{end}}{{if .MustPw}} <span class="chip chip-none">รอตั้งรหัสใหม่</span>{{end}}</td>
-      <td data-l="สร้างเมื่อ">{{ts .Created}}</td><td data-l="เข้าล่าสุด">{{tsp .LastLogin}}</td>
+    <tr><td data-l="ชื่อผู้ใช้" class="nw"><strong>{{.Username}}</strong>{{if .Self}} <span class="chip chip-ok">คุณ</span>{{end}}{{if .MustPw}} <span class="chip chip-none">รอตั้งรหัสใหม่</span>{{end}}</td>
+      <td data-l="สร้างเมื่อ" class="nw">{{ts .Created}}</td><td data-l="เข้าล่าสุด" class="nw">{{tsp .LastLogin}}</td>
       <td class="actions-cell">
         {{if not .Self}}
         <form method="post" action="/users/{{.ID}}/reset" class="inline" data-confirm="รีเซ็ตรหัสผ่านของผู้ใช้นี้ใช่หรือไม่? เขาจะถูกออกจากระบบทุกเครื่อง"><button class="btn btn-small" type="submit">รีเซ็ตรหัส</button></form>

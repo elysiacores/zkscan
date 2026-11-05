@@ -207,7 +207,7 @@ type deviceFormView struct {
 var hostRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$`)
 
 func defaultDeviceForm() deviceForm {
-	return deviceForm{Port: "4370", CommKey: "0", Transport: "tcp", Timeout: "10", Enabled: true}
+	return deviceForm{Port: "4370", CommKey: "", Transport: "tcp", Timeout: "10", Enabled: true}
 }
 
 func formFromDevice(d core.Device) deviceForm {

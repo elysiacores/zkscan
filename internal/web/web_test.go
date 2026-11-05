@@ -2,12 +2,16 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -820,5 +824,48 @@ func TestMustChangeHidesNav(t *testing.T) {
 func TestNewRequiresDeps(t *testing.T) {
 	if _, err := New(Deps{}); err == nil {
 		t.Error("ควร error เมื่อ deps ไม่ครบ")
+	}
+}
+
+func TestDeviceFormPlaceholderAndCommKeyField(t *testing.T) {
+	e := newEnv(t, admin)
+	_, body := e.do(t, "GET", "/devices/new", nil)
+	mustContain(t, body, `placeholder="เช่น 192.168.1.201"`, `placeholder="0 (ถ้าไม่เคยตั้ง)"`)
+	re := regexp.MustCompile(`<input[^>]*name="comm_key"[^>]*>`)
+	in := re.FindString(body)
+	if in == "" {
+		t.Fatal("no comm_key input on create form")
+	}
+	if !strings.Contains(in, `type="text"`) || !strings.Contains(in, `value=""`) || strings.Contains(in, "required") || strings.Contains(in, "password") {
+		t.Fatalf("create comm_key input wrong: %s", in)
+	}
+	_, body = e.do(t, "GET", "/devices/1/edit", nil)
+	in = re.FindString(body)
+	if !strings.Contains(in, `type="password"`) || !strings.Contains(in, `value=""`) || strings.Contains(body, "424242") {
+		t.Fatalf("edit comm_key input wrong: %s", in)
+	}
+}
+
+func TestStaticCacheBusting(t *testing.T) {
+	e := newEnv(t, admin)
+	_, body := e.do(t, "GET", "/login", nil)
+	for _, f := range []string{"style.css", "app.js"} {
+		b, err := fs.ReadFile(assets, "static/"+f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(b)
+		h := hex.EncodeToString(sum[:])[:10]
+		mustContain(t, body, "/static/"+f+"?v="+h)
+		resp, _ := e.do(t, "GET", "/static/"+f+"?v="+h, nil)
+		if cc := resp.Header.Get("Cache-Control"); cc != "public, max-age=31536000, immutable" {
+			t.Errorf("%s matching v: Cache-Control=%q", f, cc)
+		}
+		for _, q := range []string{"", "?v=deadbeef00"} {
+			resp, _ = e.do(t, "GET", "/static/"+f+q, nil)
+			if cc := resp.Header.Get("Cache-Control"); cc != "public, max-age=3600" {
+				t.Errorf("%s%s: Cache-Control=%q", f, q, cc)
+			}
+		}
 	}
 }
