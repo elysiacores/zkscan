@@ -41,6 +41,9 @@ type session struct {
 	sessionID uint16
 	replyID   uint16
 	recvBuf   []byte
+	// disabled: DISABLEDEVICE was sent and ENABLEDEVICE has not been confirmed since,
+	// so the scanner may still be locked for users.
+	disabled bool
 }
 
 // fail converts an I/O error into a *core.DeviceError (ctx cancellation wins).

@@ -34,6 +34,8 @@ func (s *session) pullSession() (core.Snapshot, error) {
 	if err := s.ctx.Err(); err != nil {
 		return core.Snapshot{}, s.fail(err)
 	}
+	// set before sending: if the reply is lost the device may still have been disabled
+	s.disabled = true
 	if err := s.disableDevice(); err != nil {
 		return core.Snapshot{}, err
 	}
@@ -78,8 +80,16 @@ func (client) Fetch(ctx context.Context, d core.Device) (core.Snapshot, error) {
 	// (skipped when ctx is cancelled: the connection is already closed and the caller wants out)
 	if ctx.Err() == nil {
 		s.timeout = min(cleanupTimeout, deviceTimeout(d))
-		_ = s.enableDevice()
+		if s.disabled && s.enableDevice() == nil {
+			s.disabled = false
+		}
 		_ = s.exit()
+	}
+	if s.disabled {
+		// ENABLEDEVICE did not get through (ctx cancelled / connection broken): the scanner would stay
+		// locked and staff could not clock in, so try once more on a fresh connection.
+		s.close()
+		recoverEnable(ctx, d)
 	}
 	if err != nil {
 		return core.Snapshot{}, err
@@ -118,4 +128,27 @@ func (client) SetTime(ctx context.Context, d core.Device, t time.Time) error {
 	err = s.setTime(t)
 	_ = s.exit()
 	return err
+}
+
+const (
+	// recoverTimeout bounds the whole ENABLEDEVICE recovery on a new connection.
+	recoverTimeout = 5 * time.Second
+	// recoverIOTimeout caps the per-step I/O timeout of the recovery connection.
+	recoverIOTimeout = 3 * time.Second
+)
+
+// recoverEnable is the single best-effort attempt to ENABLEDEVICE on a new connection after a Fetch
+// left the scanner disabled. It is detached from ctx cancellation (ctx is usually already dead) and
+// all its errors are ignored: the caller returns the original error.
+func recoverEnable(ctx context.Context, d core.Device) {
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recoverTimeout)
+	defer cancel()
+	d.TimeoutSec = int(min(deviceTimeout(d), recoverIOTimeout) / time.Second)
+	s, err := openAndConnect(rctx, d)
+	if err != nil {
+		return
+	}
+	defer s.close()
+	_ = s.enableDevice()
+	_ = s.exit()
 }

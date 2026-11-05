@@ -240,8 +240,8 @@ func TestFetchTimeoutBounded(t *testing.T) {
 	})
 	before := time.Now()
 	_, _ = p.PullDevice(context.Background(), 1)
-	if got := dl.Sub(before); got < 11*time.Second || got > 13*time.Second {
-		t.Errorf("deadline in %v, want ~12s", got)
+	if got := dl.Sub(before); got < fetchTimeout-time.Minute || got > fetchTimeout+time.Minute {
+		t.Errorf("deadline in %v, want ~15m", got)
 	}
 }
 

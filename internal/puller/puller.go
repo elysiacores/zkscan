@@ -15,11 +15,10 @@ import (
 const (
 	defaultInitialDelay    = 5 * time.Second  // ดึงครั้งแรกหลังเริ่ม
 	defaultDisabledRecheck = 30 * time.Second // ปิดการดึงตามรอบ: เช็กการตั้งค่าใหม่ทุกกี่วินาที
-	defaultTimeoutSec      = 10
-	// fetchTimeoutFactor: การ Fetch หนึ่งครั้งมีการคุยกับเครื่องหลายรอบ (เชื่อมต่อ, ข้อมูลเครื่อง,
-	// รายชื่อ, บันทึกเวลา) แต่ TimeoutSec ของเครื่องเป็นเวลารอต่อหนึ่งรอบ จึงให้เวลารวมทั้งหมด
-	// TimeoutSec*6 (เครื่อง 10 วินาที = 60 วินาทีต่อเครื่อง)
-	fetchTimeoutFactor = 6
+	// fetchTimeout: เพดานเวลารวมของการ Fetch หนึ่งครั้ง (ค่าคงที่) เครื่องที่มีบันทึกจำนวนมากผ่าน UDP
+	// อาจใช้เวลานาน ส่วนการค้างถูกกันไว้แล้วด้วย TimeoutSec ของทุกขั้นตอน I/O ใน zk
+	// ตัวเพดานนี้เป็นเพียงตาข่ายนิรภัยสุดท้าย และยังสืบทอดการยกเลิกจาก ctx ของ Run/PullAll
+	fetchTimeout = 15 * time.Minute
 	// saveTimeout: เวลาสูงสุดของการเขียนผลลง store หลังดึงเสร็จ (ไม่ผูกกับ ctx ที่อาจถูกยกเลิก
 	// เพื่อไม่ให้ข้อมูลที่ดึงมาแล้วหายตอนปิดบริการ)
 	saveTimeout = 30 * time.Second
@@ -179,11 +178,7 @@ func (p *Puller) pullOne(ctx context.Context, d core.Device) core.PullResult {
 	res := core.PullResult{DeviceID: d.ID, DeviceName: d.Name, At: start}
 	id := d.ID
 
-	timeout := d.TimeoutSec
-	if timeout <= 0 {
-		timeout = defaultTimeoutSec
-	}
-	fctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*fetchTimeoutFactor*time.Second)
+	fctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	var snap core.Snapshot
 	err := guard(func() (e error) { snap, e = p.cl.Fetch(fctx, d); return })
 	cancel()
