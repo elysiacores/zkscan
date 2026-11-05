@@ -107,12 +107,10 @@ nc -vz 192.168.1.201 4370
 ล็อกอินเข้า server (ด้วย SSH หรือหน้าจอ) แล้วรัน 3 บรรทัดนี้ทีละบรรทัด:
 
 ```bash
-git clone <ที่อยู่ repo ของ zkscan> zkscan
+git clone https://github.com/elysiacores/zkscan.git
 cd zkscan
 sudo ./install.sh
 ```
-
-(แทน `<ที่อยู่ repo ของ zkscan>` ด้วยที่อยู่ GitHub จริง ที่ผู้เผยแพร่ให้มา)
 
 ตัวติดตั้งทำงานอัตโนมัติ 6 ขั้น ใช้เวลาราว 1-5 นาที (ครั้งแรกนานกว่าเพราะต้องดาวน์โหลดและคอมไพล์) **อย่าเพิ่งปิดหน้าต่าง**
 รันซ้ำกี่ครั้งก็ปลอดภัย (ใช้อัปเดตเวอร์ชันได้ด้วย)
@@ -199,7 +197,7 @@ sudo -u zkscan env ZKSCAN_DATA=/var/lib/zkscan /usr/local/bin/zkscan show-initia
 บนคอมพิวเตอร์เครื่องอื่นที่มี Go 1.24 ขึ้นไป และอินเทอร์เน็ต:
 
 ```bash
-git clone <ที่อยู่ repo ของ zkscan> zkscan
+git clone https://github.com/elysiacores/zkscan.git
 cd zkscan
 make dist
 ```
@@ -223,7 +221,7 @@ sudo systemctl status zkscan
 เหมาะกับ server ที่ไม่มี systemd หรือที่ใช้ Docker อยู่แล้ว ต้องติดตั้ง Docker และ Docker Compose (คำสั่ง `docker compose`) ไว้ก่อน และต่ออินเทอร์เน็ตได้ตอน build
 
 ```bash
-git clone <ที่อยู่ repo ของ zkscan> zkscan
+git clone https://github.com/elysiacores/zkscan.git
 cd zkscan
 docker compose up -d --build
 docker compose exec zkscan zkscan show-initial-password

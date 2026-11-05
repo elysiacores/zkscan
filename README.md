@@ -13,7 +13,7 @@ zkscan เป็นบริการบน Linux server ที่ **ดึง�
 ต้องใช้ Linux ที่มี systemd (Ubuntu 22.04/24.04, Debian 12, Rocky/AlmaLinux 9 ฯลฯ) CPU แบบ amd64 หรือ arm64 และต่ออินเทอร์เน็ตได้ตอนติดตั้ง
 
 ```bash
-git clone <ที่อยู่ repo ของ zkscan> zkscan
+git clone https://github.com/elysiacores/zkscan.git
 cd zkscan
 sudo ./install.sh
 ```
@@ -23,11 +23,13 @@ sudo ./install.sh
 ## ติดตั้งแบบ Docker
 
 ```bash
+git clone https://github.com/elysiacores/zkscan.git
+cd zkscan
 docker compose up -d --build
 docker compose exec zkscan zkscan show-initial-password
 ```
 
-บรรทัดที่สองแสดงรหัสผ่านชั่วคราวของ `admin` (ข้อมูลเก็บใน volume `zkscan-data`)
+บรรทัดสุดท้ายแสดงรหัสผ่านชั่วคราวของ `admin` (ข้อมูลเก็บใน volume `zkscan-data`)
 
 ## เข้าใช้ครั้งแรก
 
