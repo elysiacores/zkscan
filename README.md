@@ -65,4 +65,7 @@ go run ./cmd/zkscan serve --data ./data   # รันบนเครื่อง
 คำสั่งของโปรแกรม: `zkscan serve | init | reset-password <ชื่อผู้ใช้> | show-initial-password | version`
 ตัวเลือก (ใส่หลังชื่อคำสั่ง ค่าจากตัวเลือกชนะค่าจาก env): `--listen` (env `ZKSCAN_LISTEN`, ค่าเริ่มต้น `:6565`), `--data` (env `ZKSCAN_DATA`, ค่าเริ่มต้น `./data`), `--tls-cert` (env `ZKSCAN_TLS_CERT`), `--tls-key` (env `ZKSCAN_TLS_KEY`) สองตัวหลังต้องตั้งคู่กัน
 
-ใบอนุญาต: (ยังไม่ได้กำหนด)
+## ใบอนุญาต
+
+[MIT](LICENSE) — นำไปใช้ แก้ไข และแจกจ่ายต่อได้ รวมถึงใช้ในเชิงพาณิชย์ โดยต้องคงข้อความลิขสิทธิ์และใบอนุญาตไว้
+ฟอนต์ Sarabun ใน `internal/web/static/fonts/` ใช้ใบอนุญาต [SIL Open Font License 1.1](internal/web/static/fonts/Sarabun-OFL.txt)
