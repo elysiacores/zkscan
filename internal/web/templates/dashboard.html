@@ -1,0 +1,37 @@
+{{define "content"}}{{with .Data}}
+<div class="page-head">
+  <h1>ภาพรวม</h1>
+  <form method="post" action="/pull-all"><button class="btn btn-primary" type="submit" data-busy="กำลังดึงข้อมูล…">ดึงข้อมูลทุกเครื่อง</button></form>
+</div>
+{{if .Running}}<div class="flash flash-warn">ระบบกำลังดึงข้อมูลจากเครื่องสแกนอยู่</div>{{end}}
+<div class="stats">
+  <div class="stat"><div class="stat-n">{{num .Records}}</div><div class="stat-l">บันทึกเวลาทั้งหมด</div></div>
+  <div class="stat"><div class="stat-n">{{num .Users}}</div><div class="stat-l">พนักงานในเครื่อง</div></div>
+  <div class="stat"><div class="stat-n stat-t">{{tsp .LastPull}}</div><div class="stat-l">ดึงสำเร็จล่าสุด</div></div>
+</div>
+<h2>เครื่องสแกน</h2>
+{{if .Cards}}
+<div class="cards">
+{{range .Cards}}
+  <article class="card dev">
+    <div class="dev-head">
+      <h3>{{.Device.Name}}</h3>
+      <span class="chip chip-{{.Kind}}">{{.Text}}</span>
+    </div>
+    <div class="muted">{{.Addr}}</div>
+    {{if .Status.LastPullAt}}<div class="small">ดึงเมื่อ {{tsp .Status.LastPullAt}}</div>{{end}}
+    {{if and .Status.LastPullAt (not .Status.LastOK)}}
+      <div class="alert-box"><strong>{{dash .Status.LastError}}</strong>{{if .Status.LastHint}}<br>{{.Status.LastHint}}{{end}}</div>
+    {{end}}
+    {{if .Status.Info.Serial}}<div class="small muted">หมายเลขเครื่อง {{.Status.Info.Serial}}{{if .Status.Info.Firmware}} · {{.Status.Info.Firmware}}{{end}}</div>{{end}}
+    <div class="actions">
+      <form method="post" action="/devices/{{.Device.ID}}/pull"><button class="btn btn-small btn-primary" type="submit" data-busy="กำลังดึง…">ดึงข้อมูลเครื่องนี้</button></form>
+      <a class="btn btn-small" href="/devices/{{.Device.ID}}/edit">แก้ไข</a>
+    </div>
+  </article>
+{{end}}
+</div>
+{{else}}
+<div class="card center"><p>ยังไม่มีเครื่องสแกน</p><a class="btn btn-primary" href="/devices/new">+ เพิ่มเครื่องแรก</a></div>
+{{end}}
+{{end}}{{end}}

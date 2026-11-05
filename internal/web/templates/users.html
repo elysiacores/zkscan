@@ -1,0 +1,41 @@
+{{define "content"}}{{with .Data}}
+<div class="page-head"><h1>ผู้ดูแลระบบ</h1></div>
+{{if .Temp}}
+<section class="card secret" role="alert">
+  <h2>{{if eq .TempKind "created"}}เพิ่มผู้ดูแล “{{.TempUser}}” แล้ว{{else}}รีเซ็ตรหัสผ่านของ “{{.TempUser}}” แล้ว{{end}}</h2>
+  <p>รหัสผ่านชั่วคราว (<strong>แสดงครั้งเดียวเท่านั้น</strong> ให้จดหรือคัดลอกส่งให้เจ้าของบัญชี เขาจะถูกบังคับให้ตั้งรหัสใหม่ตอนเข้าครั้งแรก)</p>
+  <div class="copybox"><code id="temp-pw">{{.Temp}}</code><button class="btn btn-small" type="button" data-copy="temp-pw">คัดลอก</button></div>
+</section>
+{{end}}
+<div class="two">
+<section class="card flush">
+<div class="table-wrap">
+<table>
+  <thead><tr><th>ชื่อผู้ใช้</th><th>สร้างเมื่อ</th><th>เข้าล่าสุด</th><th></th></tr></thead>
+  <tbody>
+  {{range .Rows}}
+    <tr><td data-l="ชื่อผู้ใช้"><strong>{{.Username}}</strong>{{if .Self}} <span class="chip chip-ok">คุณ</span>{{end}}{{if .MustPw}} <span class="chip chip-none">รอตั้งรหัสใหม่</span>{{end}}</td>
+      <td data-l="สร้างเมื่อ">{{ts .Created}}</td><td data-l="เข้าล่าสุด">{{tsp .LastLogin}}</td>
+      <td class="actions-cell">
+        {{if not .Self}}
+        <form method="post" action="/users/{{.ID}}/reset" class="inline" data-confirm="รีเซ็ตรหัสผ่านของผู้ใช้นี้ใช่หรือไม่? เขาจะถูกออกจากระบบทุกเครื่อง"><button class="btn btn-small" type="submit">รีเซ็ตรหัส</button></form>
+        <form method="post" action="/users/{{.ID}}/delete" class="inline" data-confirm="ลบผู้ดูแลคนนี้ใช่หรือไม่?"><button class="btn btn-small btn-danger" type="submit">ลบ</button></form>
+        {{end}}
+      </td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+</section>
+<section class="card">
+  <h2>เพิ่มผู้ดูแล</h2>
+  {{if .Err}}<div class="flash flash-err" role="alert">{{.Err}}</div>{{end}}
+  <form method="post" action="/users" class="form">
+    <label class="field"><span>ชื่อผู้ใช้ใหม่</span>
+      <input name="username" value="{{.NewName}}" autocapitalize="none" placeholder="เช่น somchai" required></label>
+    <p class="hint">ใช้ a-z, 0-9, จุด, ขีดล่าง, ขีดกลาง ยาว 3-32 ตัว ระบบจะสร้างรหัสผ่านชั่วคราวให้</p>
+    <button class="btn btn-primary" type="submit">เพิ่มผู้ดูแล</button>
+  </form>
+</section>
+</div>
+{{end}}{{end}}

@@ -1,0 +1,37 @@
+{{define "layout"}}<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{{.Title}} · ZKScan</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="/">ดึงข้อมูลสแกนนิ้ว <span>ZKTeco</span></a>
+    {{if .User}}
+    <div class="who">
+      <span class="who-name" title="ผู้ใช้ที่เข้าสู่ระบบ">{{.User}}</span>
+      <a class="btn btn-small" href="/change-password">เปลี่ยนรหัสผ่าน</a>
+      <form method="post" action="/logout"><button class="btn btn-small" type="submit">ออกจากระบบ</button></form>
+    </div>
+    {{end}}
+  </div>
+  {{if and .User (not .MustChange)}}
+  <nav class="nav" aria-label="เมนูหลัก">
+    <div class="wrap nav-in">
+      {{$active := .Active}}{{range .Nav}}<a href="{{.Href}}" class="{{if eq .Key $active}}on{{end}}">{{.Label}}</a>{{end}}
+    </div>
+  </nav>
+  {{end}}
+</header>
+<main class="wrap main">
+  {{with .Flash}}<div class="flash flash-{{.Kind}}" role="status">{{.Msg}}</div>{{end}}
+  {{template "content" .}}
+</main>
+<footer class="wrap foot">ZKScan {{.Version}}</footer>
+</body>
+</html>{{end}}

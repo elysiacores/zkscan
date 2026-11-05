@@ -1,0 +1,18 @@
+{{define "content"}}{{with .Data}}
+<section class="card">
+  <h1>{{.Heading}}</h1>
+  <div class="flash {{if .OK}}flash-ok{{else}}flash-err{{end}}" role="status"><strong>{{.Message}}</strong>{{if .Hint}}<br>{{.Hint}}{{end}}</div>
+  {{if .Rows}}<dl class="kv">{{range .Rows}}<dt>{{.K}}</dt><dd>{{.V}}</dd>{{end}}</dl>{{end}}
+  {{if .Results}}
+  <div class="table-wrap"><table>
+    <thead><tr><th>เครื่อง</th><th>ผล</th><th>รายการใหม่</th><th>พนักงาน</th><th>หมายเหตุ</th></tr></thead>
+    <tbody>{{range .Results}}
+      <tr><td data-l="เครื่อง">{{.DeviceName}}</td>
+        <td data-l="ผล">{{if .OK}}<span class="chip chip-ok">สำเร็จ</span>{{else}}<span class="chip chip-err">ไม่สำเร็จ</span>{{end}}</td>
+        <td data-l="รายการใหม่">{{num .NewRecords}}</td><td data-l="พนักงาน">{{num .TotalUsers}}</td>
+        <td data-l="หมายเหตุ">{{if .OK}}-{{else}}{{.Error}}{{if .Hint}}<br><span class="muted">{{.Hint}}</span>{{end}}{{end}}</td></tr>
+    {{end}}</tbody></table></div>
+  {{end}}
+  <p><a class="btn" href="{{.Back}}">{{.BackTxt}}</a></p>
+</section>
+{{end}}{{end}}

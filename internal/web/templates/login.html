@@ -1,0 +1,14 @@
+{{define "content"}}{{with .Data}}
+<section class="card narrow">
+  <h1>เข้าสู่ระบบ</h1>
+  {{if .Err}}<div class="flash flash-err" role="alert">{{.Err}}</div>{{end}}
+  <form method="post" action="/login" class="form">
+    <label class="field"><span>ชื่อผู้ใช้</span>
+      <input name="username" value="{{.Username}}" autocomplete="username" autocapitalize="none" required autofocus></label>
+    <label class="field"><span>รหัสผ่าน</span>
+      <input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn btn-primary btn-block" type="submit">เข้าสู่ระบบ</button>
+  </form>
+  <p class="muted small">ลืมรหัสผ่าน ให้ผู้ดูแลเซิร์ฟเวอร์ตั้งรหัสใหม่ให้</p>
+</section>
+{{end}}{{end}}
