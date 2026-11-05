@@ -41,7 +41,8 @@ type Service struct {
 	now  func() time.Time
 	cost int
 
-	throttle *throttle
+	throttle   *throttle
+	ipThrottle *throttle // นับความผิดต่อ IP ข้ามทุกชื่อผู้ใช้ (กัน password spraying)
 
 	dummyOnce sync.Once
 	dummyHash string
@@ -57,12 +58,13 @@ var _ core.AuthService = (*Service)(nil)
 
 func New(st core.Store, opts Options) *Service {
 	s := &Service{
-		st:       st,
-		ttl:      opts.SessionTTL,
-		now:      opts.Now,
-		cost:     opts.bcryptCost,
-		throttle: newThrottle(),
-		touched:  map[int64]time.Time{},
+		st:         st,
+		ttl:        opts.SessionTTL,
+		now:        opts.Now,
+		cost:       opts.bcryptCost,
+		throttle:   newThrottle(),
+		ipThrottle: newThrottleMax(ipThrottleMax),
+		touched:    map[int64]time.Time{},
 	}
 	if s.ttl <= 0 {
 		s.ttl = DefaultSessionTTL
@@ -132,10 +134,11 @@ func clip(s string, n int) string {
 func (s *Service) Login(ctx context.Context, username, password, ip string) (string, core.User, error) {
 	uname := lowerASCII(strings.TrimSpace(username))
 	key := throttleKey(uname, ip)
+	ipk := ipKey(ip)
 	now := s.now()
 
 	// ตรวจการล็อกก่อนเทียบรหัสเสมอ แม้รหัสถูกก็ไม่บอก (กัน oracle)
-	if s.throttle.blocked(key, now) {
+	if s.ipThrottle.blocked(ipk, now) || s.throttle.blocked(key, now) {
 		s.log(ctx, "warn", fmt.Sprintf("ปฏิเสธการเข้าสู่ระบบ: ลองผิดบ่อยเกินไป (IP %s)", clip(ip, 64)))
 		return "", core.User{}, core.ErrTooManyAttempts
 	}
@@ -153,6 +156,10 @@ func (s *Service) Login(ctx context.Context, username, password, ip string) (str
 
 	if !ok {
 		locked := s.throttle.fail(key, now)
+		// ตัวนับต่อ IP: ไม่ล้างเมื่อล็อกอินสำเร็จ (กันผู้โจมตีที่มีบัญชีจริงรีเซ็ต)
+		if s.ipThrottle.fail(ipk, now) {
+			s.log(ctx, "warn", fmt.Sprintf("ล็อก IP %s 15 นาที: ลองเข้าสู่ระบบผิดเกิน 20 ครั้ง", clip(ip, 64)))
+		}
 		// ไม่ใส่ชื่อผู้ใช้ที่พิมพ์มาลง log ถ้าไม่มีในระบบ (อาจเป็นรหัสผ่านที่พิมพ์ผิดช่อง)
 		who := "ชื่อผู้ใช้ที่ไม่มีในระบบ"
 		if known {

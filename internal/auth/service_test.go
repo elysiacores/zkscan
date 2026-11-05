@@ -886,3 +886,81 @@ func TestConcurrentLoginsRace(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestIPThrottleSpraying(t *testing.T) {
+	s, st, clk := newSvc(t)
+	addUser(t, s, st, "alice", "correct-horse", false)
+	ip := "3.3.3.3"
+	for i := 0; i < 21; i++ {
+		name := "ghost" + strings.Repeat("x", i)
+		if i%2 == 0 {
+			name = "user" + hex.EncodeToString([]byte{byte(i)})
+		}
+		if _, _, err := s.Login(bg, name, "bad", ip); !errors.Is(err, core.ErrBadCredentials) {
+			t.Fatalf("attempt %d: %v", i, err)
+		}
+	}
+	if _, _, err := s.Login(bg, "alice", "correct-horse", ip); !errors.Is(err, core.ErrTooManyAttempts) {
+		t.Fatalf("IP should be locked: %v", err)
+	}
+	if n := strings.Count(st.logText(), "ล็อก IP"); n != 1 {
+		t.Errorf("IP lock log lines = %d, want 1", n)
+	}
+	if _, _, err := s.Login(bg, "alice", "correct-horse", "8.8.8.8"); err != nil {
+		t.Errorf("other IP affected: %v", err)
+	}
+	clk.Add(14*time.Minute + 59*time.Second)
+	if _, _, err := s.Login(bg, "alice", "correct-horse", ip); !errors.Is(err, core.ErrTooManyAttempts) {
+		t.Fatalf("lock ended early: %v", err)
+	}
+	clk.Add(2 * time.Second)
+	if _, _, err := s.Login(bg, "alice", "correct-horse", ip); err != nil {
+		t.Fatalf("still locked after 15m: %v", err)
+	}
+}
+
+func TestIPThrottleSuccessDoesNotReset(t *testing.T) {
+	s, st, _ := newSvc(t)
+	addUser(t, s, st, "alice", "correct-horse", false)
+	ip := "2.2.2.2"
+	for i := 0; i < 20; i++ {
+		_, _, _ = s.Login(bg, "ghost"+strings.Repeat("x", i), "bad", ip)
+	}
+	if _, _, err := s.Login(bg, "alice", "correct-horse", ip); err != nil {
+		t.Fatalf("20 failures must not lock: %v", err)
+	}
+	// สำเร็จไม่ล้างตัวนับ IP: ผิดอีกครั้งเดียว (รวม 21) → ล็อก
+	if _, _, err := s.Login(bg, "ghost", "bad", ip); !errors.Is(err, core.ErrBadCredentials) {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Login(bg, "alice", "correct-horse", ip); !errors.Is(err, core.ErrTooManyAttempts) {
+		t.Fatalf("success reset the IP counter: %v", err)
+	}
+}
+
+func TestIPThrottleUnitSweepAndCap(t *testing.T) {
+	th := newThrottleMax(ipThrottleMax)
+	now := time.Now()
+	for i := 0; i < ipThrottleMax-1; i++ {
+		if th.fail("1.1.1.1", now) {
+			t.Fatal("locked too early")
+		}
+	}
+	if !th.fail("1.1.1.1", now) {
+		t.Fatal("21st should lock")
+	}
+	for i := 0; i < throttleSweep; i++ {
+		th.fail(hex.EncodeToString([]byte{byte(i), byte(i >> 8)}), now)
+	}
+	th.fail("trigger", now.Add(time.Hour))
+	if len(th.m) > 2 {
+		t.Errorf("sweep did not clear: %d", len(th.m))
+	}
+	for i := 0; i < throttleHard; i++ {
+		th.m[hex.EncodeToString([]byte{byte(i), byte(i >> 8), byte(i >> 16)})] = &attempt{count: 1, first: now}
+	}
+	th.fail("new-ip", now)
+	if _, ok := th.m["new-ip"]; ok {
+		t.Error("hard cap exceeded")
+	}
+}
