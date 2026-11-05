@@ -24,6 +24,8 @@ type fakeStore struct {
 	failGetUser  error // ถ้าตั้ง GetUserByUsername/GetUserByID คืน error นี้
 	failSession  error // GetSession
 	failKey      error // GetAPIKeyByHash
+
+	nameQueries []string // ชื่อที่ถูกส่งเข้า GetUserByUsername (เทสต์ตรวจว่าไม่ถึง store)
 }
 
 func newFakeStore() *fakeStore {
@@ -71,6 +73,7 @@ func (f *fakeStore) GetUserByID(_ context.Context, id int64) (core.User, error) 
 func (f *fakeStore) GetUserByUsername(_ context.Context, name string) (core.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.nameQueries = append(f.nameQueries, name)
 	if f.failGetUser != nil {
 		return core.User{}, f.failGetUser
 	}

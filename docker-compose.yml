@@ -7,15 +7,25 @@ services:
     image: zkscan:latest
     container_name: zkscan
     restart: unless-stopped
+    # หมายเหตุ: คอนเทนเนอร์แบบ distroless ไม่มี shell/curl จึงใส่ HEALTHCHECK ไม่ได้
+    # ดูสถานะได้ด้วย  docker compose ps  และดู log ด้วย  docker compose logs -f
+    # สำหรับใช้งานจริง จะปักหมุดอิมเมจด้วย digest (image@sha256:...) ใน Dockerfile ก็ได้ ตอนนี้ใช้แท็กตามปกติ
     ports:
       - "6565:6565"
+      # ทางเลือกที่ปลอดภัยกว่า: ผูกพอร์ตกับ IP ในวงแลนของเครื่องนี้เพียงตัวเดียว (แทนบรรทัดข้างบน)
+      # - "192.168.1.10:6565:6565"
     environment:
       # เขตเวลาของคอนเทนเนอร์ เปลี่ยนได้ด้วย ZKSCAN_TZ=Asia/Tokyo docker compose up -d
       TZ: ${ZKSCAN_TZ:-Asia/Bangkok}
       ZKSCAN_DATA: /data
       ZKSCAN_LISTEN: ":6565"
+      # เปิด HTTPS (แนะนำ): เอาเครื่องหมาย # ออกทั้งสองบรรทัดนี้ และบรรทัด volumes ของ ./certs ข้างล่าง
+      # ZKSCAN_TLS_CERT: /certs/server.crt
+      # ZKSCAN_TLS_KEY: /certs/server.key
     volumes:
       - zkscan-data:/data
+      # โฟลเดอร์ใบรับรอง (เมาท์แบบอ่านอย่างเดียว) ต้องอ่านได้โดยผู้ใช้ 65532 (เช่น chmod 0644 หรือ chown 65532)
+      # - ./certs:/certs:ro
 
 volumes:
   zkscan-data:

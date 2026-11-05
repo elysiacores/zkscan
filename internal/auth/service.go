@@ -23,6 +23,10 @@ const (
 	maxAllowedIPs     = 100
 	logSource         = "auth"
 	changePwIP        = "!change-password" // key แยกสำหรับกันเดารหัสเดิมตอนเปลี่ยนรหัส
+
+	maxConcurrentBcrypt = 4                // เพดาน bcrypt พร้อมกัน (กัน CPU หมด)
+	ipDeniedLogEvery    = 10 * time.Minute // log "IP ไม่อนุญาต" ไม่เกินหนึ่งครั้งต่อกุญแจต่อช่วงนี้
+	ipDeniedLogMax      = 1024             // เพดานขนาด map ของ log ข้างต้น
 )
 
 // Options ตั้งค่า Service; ค่าศูนย์ใช้ค่าเริ่มต้น
@@ -41,13 +45,22 @@ type Service struct {
 	now  func() time.Time
 	cost int
 
-	throttle *throttle
+	throttle   *throttle
+	ipThrottle *throttle // นับความผิดต่อ IP ข้ามทุกชื่อผู้ใช้ (กัน password spraying)
 
 	dummyOnce sync.Once
 	dummyHash string
 
 	touchMu sync.Mutex
 	touched map[int64]time.Time
+
+	// sem จำกัดจำนวน bcrypt (hash/compare) ที่ทำงานพร้อมกัน
+	sem chan struct{}
+	// bcryptHook ใช้ในเทสต์: เรียกขณะถือช่อง semaphore อยู่
+	bcryptHook func()
+
+	ipDeniedMu  sync.Mutex
+	ipDeniedLog map[int64]time.Time
 
 	// compareHook ใช้ในเทสต์ตรวจว่าทุกเส้นทางเทียบ bcrypt จริง
 	compareHook func(hash string)
@@ -57,12 +70,16 @@ var _ core.AuthService = (*Service)(nil)
 
 func New(st core.Store, opts Options) *Service {
 	s := &Service{
-		st:       st,
-		ttl:      opts.SessionTTL,
-		now:      opts.Now,
-		cost:     opts.bcryptCost,
-		throttle: newThrottle(),
-		touched:  map[int64]time.Time{},
+		st:         st,
+		ttl:        opts.SessionTTL,
+		now:        opts.Now,
+		cost:       opts.bcryptCost,
+		throttle:   newThrottle(),
+		ipThrottle: newThrottleMax(ipThrottleMax),
+		touched:    map[int64]time.Time{},
+
+		sem:         make(chan struct{}, maxConcurrentBcrypt),
+		ipDeniedLog: map[int64]time.Time{},
 	}
 	if s.ttl <= 0 {
 		s.ttl = DefaultSessionTTL
@@ -83,7 +100,29 @@ func (s *Service) log(ctx context.Context, level, msg string) {
 	_ = s.st.AddLog(ctx, core.LogEntry{At: s.now(), Level: level, Source: logSource, Message: msg})
 }
 
-func (s *Service) hashPassword(pw string) (string, error) {
+// acquire รอช่อง bcrypt; ถ้า ctx ถูกยกเลิกระหว่างรอให้คืน error ของ ctx
+func (s *Service) acquire(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("auth: รอคิว bcrypt ไม่สำเร็จ: %w", err)
+	}
+	select {
+	case s.sem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("auth: รอคิว bcrypt ไม่สำเร็จ: %w", ctx.Err())
+	}
+}
+
+func (s *Service) release() { <-s.sem }
+
+func (s *Service) hashPassword(ctx context.Context, pw string) (string, error) {
+	if err := s.acquire(ctx); err != nil {
+		return "", err
+	}
+	defer s.release()
+	if s.bcryptHook != nil {
+		s.bcryptHook()
+	}
 	h, err := bcrypt.GenerateFromPassword([]byte(pw), s.cost)
 	if err != nil {
 		return "", err
@@ -91,12 +130,19 @@ func (s *Service) hashPassword(pw string) (string, error) {
 	return string(h), nil
 }
 
-// verify เทียบรหัสผ่านกับ hash (คืน true เมื่อตรง)
-func (s *Service) verify(hash, pw string) bool {
+// verify เทียบรหัสผ่านกับ hash (ok=true เมื่อตรง); err เฉพาะเมื่อ ctx ถูกยกเลิกระหว่างรอคิว
+func (s *Service) verify(ctx context.Context, hash, pw string) (bool, error) {
+	if err := s.acquire(ctx); err != nil {
+		return false, err
+	}
+	defer s.release()
 	if s.compareHook != nil {
 		s.compareHook(hash)
 	}
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
+	if s.bcryptHook != nil {
+		s.bcryptHook()
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil, nil
 }
 
 func (s *Service) getDummyHash() string {
@@ -105,7 +151,7 @@ func (s *Service) getDummyHash() string {
 		if err != nil {
 			b = []byte("zkscan-dummy-password")
 		}
-		h, err := s.hashPassword(fmt.Sprintf("%x", b))
+		h, err := s.hashPassword(context.Background(), fmt.Sprintf("%x", b))
 		if err != nil {
 			// ไม่ควรเกิดขึ้นกับ cost ที่ถูกต้อง; ใช้ hash cost 12 รูปแบบถูกต้องแทน
 			h = "$2a$12$abcdefghijklmnopqrstuuK9hFVQ0lXKXpEoQ5xk3pT6YJf8mQe6a"
@@ -132,27 +178,45 @@ func clip(s string, n int) string {
 func (s *Service) Login(ctx context.Context, username, password, ip string) (string, core.User, error) {
 	uname := lowerASCII(strings.TrimSpace(username))
 	key := throttleKey(uname, ip)
+	ipk := ipKey(ip)
 	now := s.now()
 
 	// ตรวจการล็อกก่อนเทียบรหัสเสมอ แม้รหัสถูกก็ไม่บอก (กัน oracle)
-	if s.throttle.blocked(key, now) {
-		s.log(ctx, "warn", fmt.Sprintf("ปฏิเสธการเข้าสู่ระบบ: ลองผิดบ่อยเกินไป (IP %s)", clip(ip, 64)))
+	if s.ipThrottle.blocked(ipk, now) || s.throttle.blocked(key, now) {
+		// ไม่เขียน log: ผู้โจมตีที่ไม่ล็อกอินจะดันแถว audit ออกจาก log ได้ (log เฉพาะตอนล็อกเกิดขึ้น)
 		return "", core.User{}, core.ErrTooManyAttempts
 	}
 
-	u, err := s.st.GetUserByUsername(ctx, uname)
-	known := err == nil
-	if err != nil && !errors.Is(err, core.ErrNotFound) {
-		return "", core.User{}, fmt.Errorf("auth: อ่านผู้ใช้ไม่ได้: %w", err)
+	// ชื่อที่ไม่ผ่านกติกา [a-z0-9._-] 3..32 ไม่ถึง store เด็ดขาด: store พับตัวอักษรต่างจากเรา
+	// (เช่น "admİn") จึงอาจชี้บัญชีจริงด้วย throttle key คนละตัว
+	var (
+		u     core.User
+		known bool
+	)
+	if _, nerr := normalizeUsername(uname); nerr == nil {
+		var err error
+		u, err = s.st.GetUserByUsername(ctx, uname)
+		known = err == nil
+		if err != nil && !errors.Is(err, core.ErrNotFound) {
+			return "", core.User{}, fmt.Errorf("auth: อ่านผู้ใช้ไม่ได้: %w", err)
+		}
 	}
 	hash := u.PasswordHash
 	if !known {
 		hash = s.getDummyHash() // เวลาเท่ากับผู้ใช้ที่มีอยู่จริง
 	}
-	ok := s.verify(hash, password) && known
+	match, verr := s.verify(ctx, hash, password)
+	if verr != nil {
+		return "", core.User{}, verr // ctx ยกเลิก: ไม่ใช่รหัสผิด ไม่นับ throttle
+	}
+	ok := match && known
 
 	if !ok {
 		locked := s.throttle.fail(key, now)
+		// ตัวนับต่อ IP: ไม่ล้างเมื่อล็อกอินสำเร็จ (กันผู้โจมตีที่มีบัญชีจริงรีเซ็ต)
+		if s.ipThrottle.fail(ipk, now) {
+			s.log(ctx, "warn", fmt.Sprintf("ล็อก IP %s 15 นาที: ลองเข้าสู่ระบบผิดเกิน 20 ครั้ง", clip(ip, 64)))
+		}
 		// ไม่ใส่ชื่อผู้ใช้ที่พิมพ์มาลง log ถ้าไม่มีในระบบ (อาจเป็นรหัสผ่านที่พิมพ์ผิดช่อง)
 		who := "ชื่อผู้ใช้ที่ไม่มีในระบบ"
 		if known {
@@ -251,7 +315,11 @@ func (s *Service) ChangePassword(ctx context.Context, userID int64, currentToken
 	if s.throttle.blocked(key, now) {
 		return core.ErrTooManyAttempts
 	}
-	if !s.verify(u.PasswordHash, oldPw) {
+	match, verr := s.verify(ctx, u.PasswordHash, oldPw)
+	if verr != nil {
+		return verr
+	}
+	if !match {
 		s.throttle.fail(key, now)
 		s.log(ctx, "warn", "เปลี่ยนรหัสผ่านไม่สำเร็จ: รหัสเดิมไม่ถูกต้อง ผู้ใช้ "+u.Username)
 		return core.ErrBadCredentials
@@ -263,7 +331,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID int64, currentToken
 	if newPw == oldPw {
 		return core.ErrWeakPassword
 	}
-	hash, err := s.hashPassword(newPw)
+	hash, err := s.hashPassword(ctx, newPw)
 	if err != nil {
 		return fmt.Errorf("auth: เข้ารหัสผ่านไม่ได้: %w", err)
 	}
@@ -303,7 +371,7 @@ func (s *Service) createWithTemp(ctx context.Context, uname string) (core.User, 
 	if err != nil {
 		return core.User{}, "", fmt.Errorf("auth: สุ่มรหัสผ่านไม่ได้: %w", err)
 	}
-	hash, err := s.hashPassword(temp)
+	hash, err := s.hashPassword(ctx, temp)
 	if err != nil {
 		return core.User{}, "", fmt.Errorf("auth: เข้ารหัสผ่านไม่ได้: %w", err)
 	}
@@ -320,7 +388,11 @@ func (s *Service) createWithTemp(ctx context.Context, uname string) (core.User, 
 }
 
 func (s *Service) ResetPassword(ctx context.Context, username string) (string, error) {
-	u, err := s.st.GetUserByUsername(ctx, lowerASCII(strings.TrimSpace(username)))
+	uname := lowerASCII(strings.TrimSpace(username))
+	if _, nerr := normalizeUsername(uname); nerr != nil {
+		return "", core.ErrNotFound // ไม่ถึง store (กฎพับตัวอักษรต่างกัน)
+	}
+	u, err := s.st.GetUserByUsername(ctx, uname)
 	if err != nil {
 		return "", err
 	}
@@ -328,7 +400,7 @@ func (s *Service) ResetPassword(ctx context.Context, username string) (string, e
 	if err != nil {
 		return "", fmt.Errorf("auth: สุ่มรหัสผ่านไม่ได้: %w", err)
 	}
-	hash, err := s.hashPassword(temp)
+	hash, err := s.hashPassword(ctx, temp)
 	if err != nil {
 		return "", fmt.Errorf("auth: เข้ารหัสผ่านไม่ได้: %w", err)
 	}
@@ -473,7 +545,9 @@ func (s *Service) CheckAPIKey(ctx context.Context, plain, ip string) (core.APIKe
 		return core.APIKey{}, core.ErrUnauthorized
 	}
 	if !ipAllowed(k.AllowedIPs, ip) {
-		s.log(ctx, "warn", fmt.Sprintf("กุญแจ API \"%s\" (%s…) ถูกปฏิเสธ: IP %s ไม่อยู่ในรายการที่อนุญาต", k.Name, k.Prefix, clip(ip, 64)))
+		if s.shouldLogIPDenied(k.ID) {
+			s.log(ctx, "warn", fmt.Sprintf("กุญแจ API \"%s\" (%s…) ถูกปฏิเสธ: IP %s ไม่อยู่ในรายการที่อนุญาต", k.Name, k.Prefix, clip(ip, 64)))
+		}
 		return core.APIKey{}, core.ErrForbidden
 	}
 	s.touchKey(ctx, k)
@@ -495,4 +569,27 @@ func (s *Service) touchKey(ctx context.Context, k core.APIKey) {
 	s.touched[k.ID] = now
 	s.touchMu.Unlock()
 	_ = s.st.TouchAPIKey(ctx, k.ID, now)
+}
+
+// shouldLogIPDenied คืน true ได้ไม่เกินหนึ่งครั้งต่อกุญแจต่อ ipDeniedLogEvery
+// (กันผู้โจมตีที่ถือกุญแจรั่วท่วม log); map มีเพดานขนาด
+func (s *Service) shouldLogIPDenied(id int64) bool {
+	now := s.now()
+	s.ipDeniedMu.Lock()
+	defer s.ipDeniedMu.Unlock()
+	if last, ok := s.ipDeniedLog[id]; ok && now.Sub(last) < ipDeniedLogEvery && !now.Before(last) {
+		return false
+	}
+	if _, ok := s.ipDeniedLog[id]; !ok && len(s.ipDeniedLog) >= ipDeniedLogMax {
+		for k, t := range s.ipDeniedLog {
+			if now.Sub(t) >= ipDeniedLogEvery || now.Before(t) {
+				delete(s.ipDeniedLog, k)
+			}
+		}
+		if len(s.ipDeniedLog) >= ipDeniedLogMax {
+			return false
+		}
+	}
+	s.ipDeniedLog[id] = now
+	return true
 }

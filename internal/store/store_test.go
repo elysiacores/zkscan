@@ -555,11 +555,11 @@ func TestLogs(t *testing.T) {
 		}
 	}
 	all, err := s.ListLogs(ctx, 0, "")
-	if err != nil || len(all) != 5000 {
+	if err != nil || len(all) != 5010 { // two sources of 2505 each: nothing pruned
 		t.Fatalf("len=%d err=%v", len(all), err)
 	}
-	if all[0].Message != "m5009" || all[4999].Message != "m10" {
-		t.Errorf("first %q last %q", all[0].Message, all[4999].Message)
+	if all[0].Message != "m5009" || all[5009].Message != "m0" {
+		t.Errorf("first %q last %q", all[0].Message, all[5009].Message)
 	}
 	top, _ := s.ListLogs(ctx, 3, "")
 	if len(top) != 3 || top[0].Message != "m5009" || top[2].Message != "m5007" {
@@ -577,6 +577,59 @@ func TestLogs(t *testing.T) {
 	}
 	if none, _ := s.ListLogs(ctx, 10, "web"); len(none) != 0 {
 		t.Error(none)
+	}
+}
+
+func TestLogsRetentionPerSource(t *testing.T) {
+	s := openTemp(t)
+	if err := s.AddLog(ctx, core.LogEntry{Level: "info", Source: "web", Message: "old-web"}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5100; i++ {
+		if err := s.AddLog(ctx, core.LogEntry{Level: "warn", Source: "auth", Message: fmt.Sprintf("a%d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	web, _ := s.ListLogs(ctx, 0, "web")
+	if len(web) != 1 || web[0].Message != "old-web" {
+		t.Errorf("web row evicted: %+v", web)
+	}
+	au, _ := s.ListLogs(ctx, 0, "auth")
+	if len(au) != 5000 || au[0].Message != "a5099" || au[4999].Message != "a100" {
+		t.Errorf("auth len=%d", len(au))
+	}
+	for i := 0; i < 5001; i++ {
+		if err := s.AddLog(ctx, core.LogEntry{Level: "info", Source: "web", Message: fmt.Sprintf("w%d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	web, _ = s.ListLogs(ctx, 0, "web")
+	au, _ = s.ListLogs(ctx, 0, "auth")
+	if len(web) != 5000 || len(au) != 5000 {
+		t.Errorf("web=%d auth=%d", len(web), len(au))
+	}
+}
+
+func TestUsernameASCIIFold(t *testing.T) {
+	s := openTemp(t)
+	if _, err := s.CreateUser(ctx, core.User{Username: "admin", PasswordHash: "h"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateUser(ctx, core.User{Username: "kim", PasswordHash: "h"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetUserByUsername(ctx, "admİn"); !errors.Is(err, core.ErrNotFound) {
+		t.Errorf("admİn: %v", err)
+	}
+	if _, err := s.GetUserByUsername(ctx, "Kim"); err != nil {
+		t.Errorf("Kim should match kim (ASCII fold): %v", err)
+	}
+	if _, err := s.GetUserByUsername(ctx, "ADMIN"); err != nil {
+		t.Errorf("ADMIN: %v", err)
+	}
+	// Kelvin sign (U+212A) must not fold to k
+	if _, err := s.GetUserByUsername(ctx, "\u212Aim"); !errors.Is(err, core.ErrNotFound) {
+		t.Errorf("Kelvin: %v", err)
 	}
 }
 

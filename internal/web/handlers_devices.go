@@ -212,7 +212,8 @@ func defaultDeviceForm() deviceForm {
 
 func formFromDevice(d core.Device) deviceForm {
 	return deviceForm{
-		Name: d.Name, IP: d.IP, Port: strconv.Itoa(d.Port), CommKey: strconv.Itoa(d.CommKey),
+		// CommKey is write-only: never copied into the form.
+		Name: d.Name, IP: d.IP, Port: strconv.Itoa(d.Port),
 		Transport: string(d.Transport), Timeout: strconv.Itoa(d.TimeoutSec), Demo: d.Demo, Enabled: d.Enabled,
 	}
 }
@@ -259,7 +260,9 @@ func (f deviceForm) validate() (core.Device, map[string]string) {
 	} else {
 		errs["port"] = "พอร์ตต้องเป็นตัวเลข 1 ถึง 65535 (ปกติ 4370)"
 	}
-	if n, ok := intIn(f.CommKey, 0, 999999); ok {
+	if f.CommKey == "" {
+		d.CommKey = 0 // create: blank = 0; update overrides with the stored key
+	} else if n, ok := intIn(f.CommKey, 0, 999999); ok {
 		d.CommKey = n
 	} else {
 		errs["comm_key"] = "Comm Key ต้องเป็นตัวเลข 0 ถึง 999999 (ถ้าไม่เคยตั้งให้ใส่ 0)"
@@ -296,11 +299,13 @@ func (w *Web) deviceCreate(c *fiber.Ctx) error {
 	f := readDeviceForm(c)
 	d, errs := f.validate()
 	if len(errs) > 0 {
+		f.CommKey = ""
 		return w.renderDeviceForm(c, fiber.StatusUnprocessableEntity, deviceFormView{Form: f, Errs: errs})
 	}
 	if _, err := w.d.Store.CreateDevice(w.ctx(c), d); err != nil {
 		if errors.Is(err, core.ErrConflict) {
 			errs["name"] = "มีเครื่องชื่อนี้อยู่แล้ว ใช้ชื่ออื่น"
+			f.CommKey = ""
 			return w.renderDeviceForm(c, fiber.StatusUnprocessableEntity, deviceFormView{Form: f, Errs: errs})
 		}
 		return w.fail(c, err)
@@ -333,12 +338,17 @@ func (w *Web) deviceUpdate(c *fiber.Ctx) error {
 	f := readDeviceForm(c)
 	d, errs := f.validate()
 	if len(errs) > 0 {
+		f.CommKey = ""
 		return w.renderDeviceForm(c, fiber.StatusUnprocessableEntity, deviceFormView{IsEdit: true, ID: id, Form: f, Errs: errs})
+	}
+	if f.CommKey == "" {
+		d.CommKey = cur.CommKey // blank = keep the stored key
 	}
 	d.ID, d.CreatedAt = cur.ID, cur.CreatedAt
 	if err := w.d.Store.UpdateDevice(w.ctx(c), d); err != nil {
 		if errors.Is(err, core.ErrConflict) {
 			errs["name"] = "มีเครื่องชื่อนี้อยู่แล้ว ใช้ชื่ออื่น"
+			f.CommKey = ""
 			return w.renderDeviceForm(c, fiber.StatusUnprocessableEntity, deviceFormView{IsEdit: true, ID: id, Form: f, Errs: errs})
 		}
 		return w.fail(c, err)

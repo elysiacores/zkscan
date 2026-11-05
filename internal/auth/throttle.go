@@ -10,6 +10,7 @@ const (
 	throttleWindow = 15 * time.Minute // หน้าต่างนับ และระยะเวลาล็อก
 	throttleSweep  = 1024             // เก็บกวาดรายการเก่าเมื่อ map โตเกินนี้
 	throttleHard   = 100000           // เพดานแข็งกันหน่วยความจำบวม
+	ipThrottleMax  = 21               // ผิดเกิน 20 ครั้งจาก IP เดียว (ทุกชื่อผู้ใช้) → ล็อก IP
 )
 
 type attempt struct {
@@ -20,11 +21,26 @@ type attempt struct {
 
 // throttle นับการเข้าสู่ระบบผิดต่อ key (username + IP) ในหน่วยความจำ
 type throttle struct {
-	mu sync.Mutex
-	m  map[string]*attempt
+	mu  sync.Mutex
+	m   map[string]*attempt
+	max int // จำนวนครั้งที่ผิดแล้วล็อก
 }
 
-func newThrottle() *throttle { return &throttle{m: map[string]*attempt{}} }
+func newThrottle() *throttle { return newThrottleMax(throttleMax) }
+
+// newThrottleMax สร้าง throttle ที่ล็อกเมื่อผิดครบ max ครั้ง
+// ตัวนับต่อ IP (ข้ามทุกชื่อผู้ใช้) ใช้ instance แยกของตัวเอง จึงไม่มี key ชนกับ (username, IP)
+func newThrottleMax(max int) *throttle {
+	return &throttle{m: map[string]*attempt{}, max: max}
+}
+
+// ipKey คืน key ของตัวนับต่อ IP (ตัดความยาวเท่า throttleKey)
+func ipKey(ip string) string {
+	if len(ip) > 64 {
+		ip = ip[:64]
+	}
+	return ip
+}
 
 func throttleKey(username, ip string) string {
 	if len(username) > 64 {
@@ -70,7 +86,7 @@ func (t *throttle) fail(key string, now time.Time) bool {
 		t.m[key] = e
 	}
 	e.count++
-	if e.count >= throttleMax && !now.Before(e.lockedUntil) {
+	if e.count >= t.max && !now.Before(e.lockedUntil) {
 		e.lockedUntil = now.Add(throttleWindow)
 		return true
 	}
