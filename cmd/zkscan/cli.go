@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -44,6 +46,9 @@ const usageText = `zkscan — ดึงข้อมูลเวลาเข้�
 ตัวเลือก (ใส่หลังชื่อคำสั่ง):
   --listen <ที่อยู่>   ที่อยู่ที่รับการเชื่อมต่อ (env ZKSCAN_LISTEN, ค่าเริ่มต้น :6565)
   --data <โฟลเดอร์>    โฟลเดอร์เก็บข้อมูล (env ZKSCAN_DATA, ค่าเริ่มต้น ./data)
+  --tls-cert <ไฟล์>    ใบรับรอง HTTPS แบบ PEM (env ZKSCAN_TLS_CERT) — ใช้กับ serve
+  --tls-key <ไฟล์>     กุญแจส่วนตัว PEM (env ZKSCAN_TLS_KEY) — ต้องระบุคู่กับ --tls-cert
+                       ถ้าระบุทั้งสองจะเปิด HTTPS ที่ที่อยู่ --listen เดิม (ไม่ระบุ = HTTP)
 `
 
 // run คือตัวเข้าโปรแกรมที่ทดสอบได้: คืนรหัสออก 0 สำเร็จ, 1 ผิดพลาด, 2 ใช้คำสั่งผิด
@@ -103,6 +108,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 type options struct {
 	Listen string
 	Data   string
+
+	TLSCert string
+	TLSKey  string
 }
 
 func envOr(key, def string) string {
@@ -115,11 +123,14 @@ func envOr(key, def string) string {
 // parseOpts อ่าน --listen/--data (flag ชนะ env) และคืนอาร์กิวเมนต์ที่ไม่ใช่ flag
 // ยอมให้ flag อยู่หลังค่า positional ได้ เช่น reset-password admin --data x
 func parseOpts(cmd string, args []string, stderr io.Writer) (options, []string, error) {
-	o := options{Listen: envOr("ZKSCAN_LISTEN", defaultListen), Data: envOr("ZKSCAN_DATA", defaultData)}
+	o := options{Listen: envOr("ZKSCAN_LISTEN", defaultListen), Data: envOr("ZKSCAN_DATA", defaultData),
+		TLSCert: envOr("ZKSCAN_TLS_CERT", ""), TLSKey: envOr("ZKSCAN_TLS_KEY", "")}
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&o.Listen, "listen", o.Listen, "")
 	fs.StringVar(&o.Data, "data", o.Data, "")
+	fs.StringVar(&o.TLSCert, "tls-cert", o.TLSCert, "")
+	fs.StringVar(&o.TLSKey, "tls-key", o.TLSKey, "")
 	var pos []string
 	for {
 		if err := fs.Parse(args); err != nil {
@@ -259,7 +270,46 @@ func logSystem(st core.Store, level, msg string) {
 	_ = st.AddLog(ctx, core.LogEntry{At: time.Now(), Level: level, Source: "system", Message: msg})
 }
 
+// tlsConfig คืน nil ถ้าไม่ได้ตั้ง TLS; usage=true เมื่อระบุไม่ครบคู่
+func tlsConfig(o options) (cfg *tls.Config, usage bool, err error) {
+	if o.TLSCert == "" && o.TLSKey == "" {
+		return nil, false, nil
+	}
+	if o.TLSCert == "" || o.TLSKey == "" {
+		return nil, true, errors.New("ต้องระบุทั้ง --tls-cert และ --tls-key คู่กัน (หรือไม่ระบุเลยเพื่อใช้ HTTP)")
+	}
+	cert, err := tls.LoadX509KeyPair(o.TLSCert, o.TLSKey)
+	if err != nil {
+		return nil, false, fmt.Errorf("โหลดใบรับรอง HTTPS ไม่ได้ (%s, %s): %w", o.TLSCert, o.TLSKey, err)
+	}
+	return &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}, false, nil
+}
+
+// listen เปิดพอร์ต (ห่อด้วย TLS ถ้ามี cfg)
+func listen(addr string, cfg *tls.Config) (net.Listener, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	if cfg != nil {
+		ln = tls.NewListener(ln, cfg)
+	}
+	return ln, nil
+}
+
 func cmdServe(o options, stdout, stderr io.Writer) int {
+	tlsCfg, usage, err := tlsConfig(o)
+	if err != nil {
+		fmt.Fprintln(stderr, "ผิดพลาด:", err)
+		if usage {
+			return 2
+		}
+		return 1
+	}
+	scheme := "http"
+	if tlsCfg != nil {
+		scheme = "https"
+	}
 	st, err := openStore(o.Data)
 	if err != nil {
 		fmt.Fprintln(stderr, "ผิดพลาด:", err)
@@ -298,11 +348,18 @@ func cmdServe(o options, stdout, stderr io.Writer) int {
 	go func() { defer wg.Done(); sessionJanitor(bg, st) }()
 	go func() { defer wg.Done(); passwordFileJanitor(bg, st, o.Data, time.Minute) }()
 
-	fmt.Fprintf(stdout, "zkscan %s เริ่มทำงาน — รับการเชื่อมต่อที่ %s, โฟลเดอร์ข้อมูล %s\n", version, o.Listen, o.Data)
-	logSystem(st, "info", fmt.Sprintf("zkscan %s เริ่มทำงาน (รับการเชื่อมต่อที่ %s)", version, o.Listen))
+	fmt.Fprintf(stdout, "zkscan %s เริ่มทำงาน — รับการเชื่อมต่อที่ %s://%s, โฟลเดอร์ข้อมูล %s\n", version, scheme, o.Listen, o.Data)
+	logSystem(st, "info", fmt.Sprintf("zkscan %s เริ่มทำงาน (รับการเชื่อมต่อที่ %s://%s)", version, scheme, o.Listen))
 
 	errc := make(chan error, 1)
-	go func() { errc <- app.Listen(o.Listen) }()
+	go func() {
+		ln, err := listen(o.Listen, tlsCfg)
+		if err != nil {
+			errc <- err
+			return
+		}
+		errc <- app.Listener(ln)
+	}()
 
 	code := 0
 	select {
