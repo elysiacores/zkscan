@@ -28,7 +28,7 @@ func newSvc(t *testing.T) (*Service, *fakeStore, *fakeClock) {
 // addUser สร้างผู้ใช้ผ่าน store ตรง ๆ ด้วยรหัสที่กำหนด
 func addUser(t *testing.T, s *Service, st *fakeStore, name, pw string, must bool) core.User {
 	t.Helper()
-	h, err := s.hashPassword(pw)
+	h, err := s.hashPassword(bg, pw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestCreateUser(t *testing.T) {
 
 func TestProductionCostIs12(t *testing.T) {
 	s := New(newFakeStore(), Options{})
-	h, err := s.hashPassword("whatever12")
+	h, err := s.hashPassword(bg, "whatever12")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +334,7 @@ func TestUnknownUserComparesDummyHash(t *testing.T) {
 		t.Error("dummy hash regenerated")
 	}
 	// แม้ผู้ใช้ไม่มีอยู่ รหัสไหนก็ไม่ผ่าน
-	if s.verify(dummy, "") {
+	if ok, _ := s.verify(bg, dummy, ""); ok {
 		t.Error("dummy accepts empty")
 	}
 }
