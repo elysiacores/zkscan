@@ -1,0 +1,32 @@
+[Unit]
+Description=zkscan - บริการดึงข้อมูลสแกนนิ้วจากเครื่อง ZKTeco
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zkscan
+Group=zkscan
+EnvironmentFile=/etc/zkscan/zkscan.env
+ExecStart=/usr/local/bin/zkscan serve
+Restart=on-failure
+RestartSec=5
+UMask=0027
+
+# --- ความปลอดภัย: ให้โปรแกรมทำได้เท่าที่จำเป็น ---
+# (การเชื่อมต่อออกไปหาเครื่องสแกนในวงแลน TCP/UDP และการเปิดพอร์ต 6565 ไม่ต้องใช้สิทธิ์พิเศษ)
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/zkscan
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
