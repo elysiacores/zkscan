@@ -136,6 +136,15 @@ ZKSCAN_LISTEN=:$DEFAULT_PORT
 
 # โฟลเดอร์เก็บข้อมูล (ฐานข้อมูลอยู่ที่ \$ZKSCAN_DATA/zkscan.db)
 ZKSCAN_DATA=$DATA_DIR
+
+# --- HTTPS (แนะนำ) ---
+# ถ้าไม่เปิด HTTPS รหัสผ่านและ API key จะวิ่งในวงแลนแบบไม่เข้ารหัส
+# วางไฟล์ใบรับรองและกุญแจ (PEM) ไว้ใน $CONF_DIR (เจ้าของ root:$SERVICE_USER, ไฟล์กุญแจสิทธิ์ 0640)
+# แล้วเอาเครื่องหมาย # หน้าสองบรรทัดนี้ออก ตั้งค่าทั้งสองตัวพร้อมกัน จากนั้น sudo systemctl restart zkscan
+# เมื่อเปิดแล้วเว็บจะเป็น https://... บนพอร์ตเดิม และคุกกี้ session จะมีแฟล็ก Secure
+# ดูวิธีทำใน README.md หัวข้อ "เปิดใช้ HTTPS (แนะนำ)"
+#ZKSCAN_TLS_CERT=$CONF_DIR/server.crt
+#ZKSCAN_TLS_KEY=$CONF_DIR/server.key
 ENVEOF
   umask 0022
   chown root:"$SERVICE_USER" "$ENV_FILE"

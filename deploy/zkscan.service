@@ -28,5 +28,23 @@ RestrictSUIDSGID=true
 LockPersonality=true
 CapabilityBoundingSet=
 
+# --- ความปลอดภัยเพิ่มเติม: จำกัดชนิดการเชื่อมต่อเครือข่าย (IPv4/IPv6, ซ็อกเก็ตภายในเครื่อง, netlink สำหรับอ่านข้อมูลการ์ดเครือข่าย) ---
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+# จำกัด system call ให้เหลือเท่าที่บริการทั่วไปใช้ (ถ้าถูกบล็อกจะได้ข้อผิดพลาด EPERM แทนที่จะถูกฆ่า)
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# ห้ามหน่วยความจำที่เขียนได้และรันได้พร้อมกัน (กันการฉีดโค้ด)
+MemoryDenyWriteExecute=true
+# ห้ามแก้นาฬิการะบบ เปลี่ยนชื่อเครื่อง และอ่าน log ของเคอร์เนล
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+# ห้ามสร้าง namespace และใช้การจัดตารางเวลาแบบ realtime
+RestrictNamespaces=true
+RestrictRealtime=true
+# ซ่อนโพรเซสของผู้ใช้อื่นใน /proc
+ProtectProc=invisible
+# หมายเหตุ: ถ้าเปิด HTTPS ให้วางไฟล์ใบรับรองใน /etc/zkscan (อ่านได้อยู่แล้ว ไม่ต้องเพิ่มสิทธิ์)
+
 [Install]
 WantedBy=multi-user.target
