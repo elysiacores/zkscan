@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
-	"strings"
 	"time"
 
 	"zkscan/internal/core"
@@ -45,10 +44,10 @@ func (s *Store) getUser(ctx context.Context, where string, arg any) (core.User, 
 
 func (s *Store) CountUsers(ctx context.Context) (int, error) { return s.count(ctx, "users") }
 
-// CreateUser stores the username lowercased; ErrConflict if taken. CreatedAt is
+// CreateUser stores the username ASCII-lowercased; ErrConflict if taken. CreatedAt is
 // set to now when zero.
 func (s *Store) CreateUser(ctx context.Context, u core.User) (core.User, error) {
-	u.Username = strings.ToLower(u.Username)
+	u.Username = asciiLower(u.Username)
 	if u.CreatedAt.IsZero() {
 		u.CreatedAt = time.Now()
 	}
@@ -69,9 +68,21 @@ func (s *Store) GetUserByID(ctx context.Context, id int64) (core.User, error) {
 	return s.getUser(ctx, "id = ?", id)
 }
 
-// GetUserByUsername is case-insensitive (the name is lowercased first).
+// asciiLower folds only A-Z to a-z. Unicode folding (strings.ToLower) would let
+// look-alikes such as "admİn" (U+0130) match "admin".
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+// GetUserByUsername is ASCII-case-insensitive (the name is ASCII-lowered first).
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (core.User, error) {
-	return s.getUser(ctx, "username = ?", strings.ToLower(username))
+	return s.getUser(ctx, "username = ?", asciiLower(username))
 }
 
 func (s *Store) ListUsers(ctx context.Context) ([]core.User, error) {
@@ -263,7 +274,7 @@ func (s *Store) TouchAPIKey(ctx context.Context, id int64, at time.Time) error {
 
 const maxLogs = 5000
 
-// AddLog inserts the entry (At defaults to now) and keeps only the newest 5000.
+// AddLog inserts the entry (At defaults to now) and keeps only the newest 5000 rows of that entry's source.
 func (s *Store) AddLog(ctx context.Context, e core.LogEntry) error {
 	if e.At.IsZero() {
 		e.At = time.Now()
@@ -281,7 +292,8 @@ func (s *Store) AddLog(ctx context.Context, e core.LogEntry) error {
 		fmtLocal(e.At), e.Level, e.Source, dev, e.Message); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM logs WHERE id <= (SELECT MAX(id) FROM logs) - ?`, maxLogs); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM logs WHERE source = ? AND id <= (SELECT id FROM logs WHERE source = ? ORDER BY id DESC LIMIT 1 OFFSET ?)`,
+		e.Source, e.Source, maxLogs); err != nil {
 		return err
 	}
 	return tx.Commit()

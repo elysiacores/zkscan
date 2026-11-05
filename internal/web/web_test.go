@@ -543,7 +543,45 @@ func TestCommKeyOnlyInEditForm(t *testing.T) {
 		mustNotContain(t, body, "424242")
 	}
 	_, body := e.do(t, "GET", "/devices/1/edit", nil)
-	mustContain(t, body, `value="424242"`)
+	mustNotContain(t, body, "424242")
+	mustContain(t, body, `type="password"`, `autocomplete="new-password"`, "เว้นว่างไว้ = ใช้รหัสเดิม")
+}
+
+func TestCommKeyWriteOnly(t *testing.T) {
+	e := newEnv(t, admin)
+	key := func() int { return e.store.devices[0].CommKey }
+	upd := func(over map[string]string) (*http.Response, string) {
+		return e.do(t, "POST", "/devices/1", devForm(over))
+	}
+	if key() != 424242 {
+		t.Fatal(key())
+	}
+	if resp, _ := upd(map[string]string{"comm_key": ""}); resp.StatusCode != 303 || key() != 424242 {
+		t.Errorf("blank must keep: %d key=%d", resp.StatusCode, key())
+	}
+	if resp, _ := upd(map[string]string{"comm_key": "777"}); resp.StatusCode != 303 || key() != 777 {
+		t.Errorf("value must change: %d key=%d", resp.StatusCode, key())
+	}
+	if resp, body := upd(map[string]string{"comm_key": "1234567"}); resp.StatusCode != 422 || key() != 777 {
+		t.Errorf("bad key: %d key=%d", resp.StatusCode, key())
+	} else {
+		mustContain(t, body, "Comm Key ต้องเป็นตัวเลข 0 ถึง 999999")
+		mustNotContain(t, body, "1234567")
+	}
+	// validation error elsewhere must not echo the typed key
+	_, body := upd(map[string]string{"comm_key": "5551212", "ip": ""})
+	mustNotContain(t, body, "5551212")
+	// create: blank stores 0; error page does not echo
+	resp, _ := e.do(t, "POST", "/devices", devForm(map[string]string{"name": "ใหม่", "comm_key": ""}))
+	if resp.StatusCode != 303 {
+		t.Fatalf("create %d", resp.StatusCode)
+	}
+	last := e.store.devices[len(e.store.devices)-1]
+	if last.Name != "ใหม่" || last.CommKey != 0 {
+		t.Errorf("%+v", last)
+	}
+	_, body = e.do(t, "POST", "/devices", devForm(map[string]string{"comm_key": "8675309", "ip": ""}))
+	mustNotContain(t, body, "8675309")
 }
 
 func TestDeviceActionsShowThaiMessageAndHint(t *testing.T) {

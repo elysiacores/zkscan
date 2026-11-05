@@ -16,7 +16,8 @@
         <input name="port" value="{{.Form.Port}}" inputmode="numeric" required>
         {{with .Errs.port}}<em class="err">{{.}}</em>{{end}}</label>
       <label class="field {{if .Errs.comm_key}}bad{{end}}"><span>รหัสเชื่อมต่อ (Comm Key)</span>
-        <input name="comm_key" value="{{.Form.CommKey}}" inputmode="numeric" required>
+        <input type="password" name="comm_key" value="{{if not .IsEdit}}{{.Form.CommKey}}{{end}}" autocomplete="new-password" inputmode="numeric" {{if not .IsEdit}}required{{end}}>
+        {{if .IsEdit}}<small class="muted">เว้นว่างไว้ = ใช้รหัสเดิม</small>{{end}}
         {{with .Errs.comm_key}}<em class="err">{{.}}</em>{{end}}</label>
     </div>
     <p class="hint">Comm Key คือรหัสเชื่อมต่อที่ตั้งในเมนูเครื่อง (การสื่อสาร › ความปลอดภัย) ถ้าไม่เคยตั้งให้ใส่ 0 · พอร์ตปกติ 4370</p>
